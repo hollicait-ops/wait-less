@@ -2,8 +2,8 @@ package com.streambridge
 
 import android.content.Context
 import android.util.Log
-import org.json.JSONObject
 import java.nio.ByteBuffer
+import org.json.JSONObject
 import org.webrtc.DataChannel
 import org.webrtc.DefaultVideoDecoderFactory
 import org.webrtc.EglBase
