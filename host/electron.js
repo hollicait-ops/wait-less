@@ -5,7 +5,10 @@ const { createSignalingServer } = require('./src/signaling');
 
 const SIGNALING_PORT = 8080;
 
+const ALLOWED_BUTTONS = new Set(['left', 'right', 'middle']);
+
 let mainWindow = null;
+let signalingServer = null;
 let robot = null;
 
 function getLocalIP() {
@@ -38,7 +41,7 @@ function createWindow() {
 }
 
 function startSignalingServer() {
-  createSignalingServer(SIGNALING_PORT, (msg) => {
+  signalingServer = createSignalingServer(SIGNALING_PORT, (msg) => {
     console.log('[signaling]', msg);
     if (mainWindow) {
       mainWindow.webContents.send('signaling-status', msg);
@@ -60,14 +63,19 @@ ipcMain.on('input-event', (_event, data) => {
   const { width, height } = screen.getPrimaryDisplay().size;
 
   if (type === 'mousemove') {
+    if (typeof x !== 'number' || typeof y !== 'number' || x < 0 || x > 1 || y < 0 || y > 1) return;
     robot.moveMouse(Math.round(x * width), Math.round(y * height));
   } else if (type === 'click') {
+    if (!ALLOWED_BUTTONS.has(button)) return;
     robot.mouseClick(button);
   } else if (type === 'scroll') {
+    if (typeof dy !== 'number') return;
     robot.scrollMouse(0, dy);
   } else if (type === 'keydown') {
+    if (typeof key !== 'string' || key.length === 0 || key.length > 32) return;
     robot.keyToggle(key, 'down');
   } else if (type === 'keyup') {
+    if (typeof key !== 'string' || key.length === 0 || key.length > 32) return;
     robot.keyToggle(key, 'up');
   }
 });
@@ -79,6 +87,10 @@ app.whenReady().then(() => {
   loadRobotjs();
   startSignalingServer();
   createWindow();
+});
+
+app.on('before-quit', () => {
+  if (signalingServer) signalingServer.close();
 });
 
 app.on('window-all-closed', () => {

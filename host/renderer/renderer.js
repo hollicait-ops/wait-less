@@ -33,7 +33,7 @@ async function init() {
 }
 
 // --- Signaling WebSocket ---
-function connectSignaling(ip, port) {
+function connectSignaling(port) {
   const url = `ws://localhost:${port}`;
   signalingWs = new WebSocket(url);
 
@@ -43,12 +43,19 @@ function connectSignaling(ip, port) {
   };
 
   signalingWs.onmessage = async (event) => {
-    const msg = JSON.parse(event.data);
+    let msg;
+    try {
+      msg = JSON.parse(event.data);
+    } catch (err) {
+      logStatus(`Signaling: received unparseable message — ${err.message}`);
+      return;
+    }
     await handleSignalingMessage(msg);
   };
 
   signalingWs.onerror = (err) => {
     logStatus(`Signaling error: ${err.message || 'unknown'}`);
+    startBtn.disabled = false;
   };
 
   signalingWs.onclose = () => {
@@ -82,13 +89,14 @@ function sendSignaling(data) {
 startBtn.addEventListener('click', async () => {
   startBtn.disabled = true;
   const port = await streambridge.getSignalingPort();
-  const ip = await streambridge.getLocalIP();
-  connectSignaling(ip, port);
+  connectSignaling(port);
 
   // SB-4 will call startCapture() here to begin screen capture + WebRTC offer
 });
 
-// Expose for SB-4
+// Hooks for SB-4 — must be set before any signaling messages arrive from the
+// remote peer, otherwise incoming SDP answers and ICE candidates are silently
+// dropped (handleSignalingMessage guards on peerConnection being non-null).
 window.sendSignaling = sendSignaling;
 window.setPeerConnection = (pc) => { peerConnection = pc; };
 window.updateStreamStatus = (msg) => { streamStatus.textContent = msg; };
