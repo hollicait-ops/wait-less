@@ -39,12 +39,35 @@ npm run start
 
 The app window displays the host's local IP address and a **Start Streaming** button. Note the IP — you'll enter it on the Fire Stick.
 
-### 2. Install the client on Fire Stick
+### 2. Set up the Fire Stick
 
-Enable ADB on the Fire Stick: Settings → My Fire TV → Developer Options → turn on **ADB Debugging** and **Apps from Unknown Sources**.
+**Physical setup:**
+
+1. Plug the Fire Stick into an HDMI port on your TV.
+2. Plug the Fire Stick's power adapter into a wall outlet (not the TV's USB port — it may not supply enough power).
+3. Turn on the TV and switch to the correct HDMI input.
+
+**Initial Fire OS setup** (skip if already done):
+
+4. Follow the on-screen prompts to select your language and sign in to your Amazon account.
+5. When prompted for WiFi, connect to the **same 5GHz network** your Windows PC is on. Using 2.4GHz will likely exceed the 60ms latency target.
+
+**Enable developer options:**
+
+6. Go to **Settings** (gear icon in the top menu bar) → **My Fire TV** → **About**.
+7. Scroll down to **Fire TV Stick** and click it **7 times** in a row. You will see a countdown, then a message saying "You are now a developer".
+8. Press the Back button to return to **My Fire TV**. A new **Developer Options** item will now appear in the list.
+9. Open **Developer Options** and turn on **ADB Debugging**.
+10. In the same screen, turn on **Apps from Unknown Sources**.
+
+**Find the Fire Stick's IP address:**
+
+11. Go to **Settings** → **My Fire TV** → **About** → **Network**. Note the IP address shown (e.g. `192.168.1.42`). You will need this in the next step.
+
+**Install the app:**
 
 ```bash
-# Connect to the Fire Stick over WiFi ADB
+# Connect to the Fire Stick over WiFi ADB (use the IP from step 11)
 adb connect <firestick-ip>:5555
 
 # Build and install
@@ -52,7 +75,9 @@ cd client
 ./gradlew installDebug
 ```
 
-The APK is also at `client/app/build/outputs/apk/debug/app-debug.apk` if you prefer to sideload manually.
+If `adb connect` times out, make sure your PC and Fire Stick are on the same WiFi network and that ADB Debugging is enabled (step 9).
+
+The APK is also at `client/app/build/outputs/apk/debug/app-debug.apk` if you prefer to sideload manually via the [Downloader app](https://www.amazon.com/AFTVnews-com-Downloader/dp/B01N0BP507).
 
 ### 3. Connect
 
