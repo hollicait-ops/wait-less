@@ -27,10 +27,6 @@ function preferH264(sdp) {
   }).join('\r\n');
 }
 
-// Allow preferH264 to be required by Node.js tests (peer.js runs in the
-// renderer where module is undefined, so this is a no-op in the browser).
-if (typeof module !== 'undefined') module.exports = { preferH264 };
-
 async function startWebRTC(stream) {
   const pc = new RTCPeerConnection({ iceServers: [] });
 
@@ -63,3 +59,7 @@ async function startWebRTC(stream) {
 
   return pc;
 }
+
+// Allow preferH264 to be required by Node.js tests (peer.js runs in the
+// renderer where module is undefined, so this is a no-op in the browser).
+if (typeof module !== 'undefined') module.exports = { preferH264 };
