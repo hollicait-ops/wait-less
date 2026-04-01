@@ -101,7 +101,7 @@ The APK is also at `client/app/build/outputs/apk/debug/app-debug.apk` if you pre
 ```
 streambridge/
 ├── host/                        # Electron app — runs on the Windows PC
-│   ├── electron.js              # Main process: signaling server, input relay
+│   ├── main.js                  # Main process: signaling server, input relay
 │   ├── src/
 │   │   ├── signaling.js         # WebSocket signaling server
 │   │   ├── capture.js           # Screen/audio capture via desktopCapturer

@@ -2,7 +2,7 @@
   "name": "streambridge-host",
   "version": "0.1.0",
   "description": "StreamBridge host — screen capture and streaming to Fire Stick",
-  "main": "electron.js",
+  "main": "main.js",
   "scripts": {
     "start": "electron .",
     "build": "electron-builder --win",

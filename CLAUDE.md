@@ -15,7 +15,7 @@ streambridge/
 │       └── validate-setup.md  # Sub-agent: validates dev environment
 ├── host/                      # Electron app — runs on Windows laptop
 │   ├── package.json
-│   ├── electron.js            # Main process: signaling server + app lifecycle
+│   ├── main.js                # Main process: signaling server + app lifecycle
 │   ├── src/
 │   │   ├── signaling.js       # WebSocket signaling server (ws library)
 │   │   ├── capture.js         # Screen/audio capture via desktopCapturer

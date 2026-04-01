@@ -70,7 +70,7 @@ Report what was found as an informational note, not a pass/fail.
 Run: `netstat -ano | findstr :8080`
 
 Pass: No output (port is free).
-Fail: Port 8080 is in use. Identify the process ID from the output and ask the user if they want to kill it, or suggest changing the signaling port in `host/electron.js` and `client/app/src/main/java/com/streambridge/SignalingClient.kt`.
+Fail: Port 8080 is in use. Identify the process ID from the output and ask the user if they want to kill it, or suggest changing the signaling port in `host/main.js` and `client/app/src/main/java/com/streambridge/SignalingClient.kt`.
 
 ---
 

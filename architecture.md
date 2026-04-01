@@ -36,7 +36,7 @@ Stream the Windows laptop display and audio to an Amazon Fire Stick over local W
 
 ```
 Fire Stick App                  Signaling Server              Electron Renderer
-      │                         (electron.js, port 8080)            │
+      │                         (main.js, port 8080)                 │
       │── WS connect ──────────────────►│                            │
       │                                 │◄── WS connect (internal) ──│
       │                                 │                            │
@@ -58,7 +58,7 @@ Fire Stick App                  Signaling Server              Electron Renderer
 
 ## Component Details
 
-### Host: Electron Main Process (`electron.js`)
+### Host: Electron Main Process (`main.js`)
 
 Responsibilities:
 - Spawn the Electron window (renderer)
