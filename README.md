@@ -8,7 +8,7 @@ Architecturally similar to Steam Link: an Electron host captures and streams the
 
 ## Requirements
 
-### Host (Windows laptop)
+### Host (Windows PC)
 
 - Windows 10 or 11
 - Node.js 20+
@@ -37,7 +37,7 @@ npm install
 npm run start
 ```
 
-The app window displays your laptop's local IP address and a **Start Streaming** button. Note the IP — you'll enter it on the Fire Stick.
+The app window displays the host's local IP address and a **Start Streaming** button. Note the IP — you'll enter it on the Fire Stick.
 
 ### 2. Install the client on Fire Stick
 
@@ -56,8 +56,8 @@ The APK is also at `client/app/build/outputs/apk/debug/app-debug.apk` if you pre
 
 ### 3. Connect
 
-1. On the laptop: click **Start Streaming** in the host app
-2. On the Fire Stick: open StreamBridge, enter the laptop's IP, press **Connect**
+1. On the host PC: click **Start Streaming** in the host app
+2. On the Fire Stick: open StreamBridge, enter the host's IP, press **Connect**
 3. The stream starts automatically once the WebRTC handshake completes
 
 ### Fire Stick controls
@@ -75,7 +75,7 @@ The APK is also at `client/app/build/outputs/apk/debug/app-debug.apk` if you pre
 
 ```
 streambridge/
-├── host/                        # Electron app — runs on the Windows laptop
+├── host/                        # Electron app — runs on the Windows PC
 │   ├── electron.js              # Main process: signaling server, input relay
 │   ├── src/
 │   │   ├── signaling.js         # WebSocket signaling server
@@ -133,7 +133,7 @@ This lets you verify the WebRTC stream is working before touching Android.
 
 ### Measuring latency
 
-Display a running stopwatch on the laptop, film both the laptop screen and the Fire Stick simultaneously with a phone camera, then count the frame offset. Each frame at 60fps is ~16.7ms.
+Display a running stopwatch on the host PC, film both the host screen and the Fire Stick simultaneously with a phone camera, then count the frame offset. Each frame at 60fps is ~16.7ms.
 
 ---
 
