@@ -11,8 +11,8 @@ Architecturally similar to Steam Link: an Electron host captures and streams the
 ### Host (Windows PC)
 
 - Windows 10 or 11
-- Node.js 20+
-- Electron 28+ (installed via `npm install`)
+- [Node.js 20+](https://nodejs.org/en/download)
+- Electron 28+ (installed automatically via `npm install`)
 
 ### Client (Amazon Fire Stick)
 
@@ -138,6 +138,21 @@ Display a running stopwatch on the host PC, film both the host screen and the Fi
 ---
 
 ## Contributing
+
+### Prerequisites
+
+| Tool | Version | Download |
+|------|---------|----------|
+| Node.js | 20+ | [nodejs.org](https://nodejs.org/en/download) |
+| JDK | 17+ | [Microsoft OpenJDK](https://learn.microsoft.com/en-us/java/openjdk/download) or [Adoptium](https://adoptium.net) |
+| Android SDK | API 34 | [Android Studio](https://developer.android.com/studio) (easiest) or [command-line tools](https://developer.android.com/studio#command-line-tools-only) |
+| ADB | any | Bundled with Android Studio / SDK platform-tools |
+
+After installing the Android SDK, point the build at it:
+
+```bash
+echo "sdk.dir=C:\\Users\\<you>\\AppData\\Local\\Android\\Sdk" > client/local.properties
+```
 
 ### Git hooks
 
