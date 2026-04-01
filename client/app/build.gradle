@@ -33,7 +33,11 @@ android {
 
 dependencies {
     // WebRTC (maintained Google libwebrtc fork with Kotlin API)
-    implementation 'io.getstream:stream-webrtc-android:1.1.5'
+    implementation 'io.getstream:stream-webrtc-android:1.3.8'
+
+    // Fragment and AppCompat — needed for FragmentActivity; not pulled transitively by stream-webrtc-android 1.3.8
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.fragment:fragment-ktx:1.8.4'
 
     // WebSocket signaling
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
