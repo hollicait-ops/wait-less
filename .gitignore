@@ -1,0 +1,5 @@
+node_modules/
+dist/
+*.exe
+*.apk
+.DS_Store

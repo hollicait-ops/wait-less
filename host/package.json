@@ -1,0 +1,28 @@
+{
+  "name": "streambridge-host",
+  "version": "0.1.0",
+  "description": "StreamBridge host — screen capture and streaming to Fire Stick",
+  "main": "electron.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "robotjs": "^0.6.0",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3",
+    "eslint": "^8.57.1"
+  },
+  "build": {
+    "appId": "com.streambridge.host",
+    "productName": "StreamBridge",
+    "win": {
+      "target": "nsis"
+    },
+    "extraResources": []
+  }
+}
