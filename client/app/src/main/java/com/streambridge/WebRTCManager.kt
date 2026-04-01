@@ -24,6 +24,7 @@ class WebRTCManager(
 ) {
     companion object {
         private const val TAG = "WebRTCManager"
+        private var factoryInitialized = false
     }
 
     /** Set by StreamActivity after both WebRTCManager and SignalingClient are created. */
@@ -35,16 +36,20 @@ class WebRTCManager(
 
     // DataChannel for sending input events back to the host (wired in SB-10)
     var dataChannel: DataChannel? = null
+        private set
 
     fun start() {
         val base = EglBase.create()
         eglBase = base
 
-        PeerConnectionFactory.initialize(
-            PeerConnectionFactory.InitializationOptions.builder(context)
-                .setEnableInternalTracer(false)
-                .createInitializationOptions()
-        )
+        if (!factoryInitialized) {
+            PeerConnectionFactory.initialize(
+                PeerConnectionFactory.InitializationOptions.builder(context)
+                    .setEnableInternalTracer(false)
+                    .createInitializationOptions()
+            )
+            factoryInitialized = true
+        }
 
         factory = PeerConnectionFactory.builder()
             .setVideoDecoderFactory(DefaultVideoDecoderFactory(base.eglBaseContext))
@@ -76,7 +81,11 @@ class WebRTCManager(
                                     put("type", "answer")
                                     put("sdp", answer.description)
                                 }
-                                onSendSignaling?.invoke(answerJson)
+                                if (onSendSignaling != null) {
+                                    onSendSignaling?.invoke(answerJson)
+                                } else {
+                                    Log.w(TAG, "onSendSignaling not set — answer discarded")
+                                }
                             }
                             override fun onSetFailure(error: String?) {
                                 Log.e(TAG, "setLocalDescription failed: $error")
