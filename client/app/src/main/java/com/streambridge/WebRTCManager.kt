@@ -2,6 +2,7 @@ package com.streambridge
 
 import android.content.Context
 import android.util.Log
+import java.nio.ByteBuffer
 import org.json.JSONObject
 import org.webrtc.DataChannel
 import org.webrtc.DefaultVideoDecoderFactory
@@ -118,7 +119,10 @@ class WebRTCManager(
     }
 
     fun sendDataChannelMessage(json: JSONObject) {
-        // TODO (SB-10): send via dataChannel
+        val dc = dataChannel ?: return
+        if (dc.state() != DataChannel.State.OPEN) return
+        val bytes = json.toString().toByteArray(Charsets.UTF_8)
+        dc.send(DataChannel.Buffer(ByteBuffer.wrap(bytes), false))
     }
 
     fun dispose() {
