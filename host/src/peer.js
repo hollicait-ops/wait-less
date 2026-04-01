@@ -52,6 +52,13 @@ async function startWebRTC(stream) {
     }
   };
 
+  const dc = pc.createDataChannel('input');
+  dc.onmessage = ({ data }) => {
+    let parsed;
+    try { parsed = JSON.parse(data); } catch { return; }
+    window.streambridge.sendInputEvent(parsed);
+  };
+
   const offer = await pc.createOffer();
   const mungedSdp = preferH264(offer.sdp);
   await pc.setLocalDescription({ type: offer.type, sdp: mungedSdp });
