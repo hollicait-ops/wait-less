@@ -6,6 +6,7 @@
   "scripts": {
     "start": "electron .",
     "build": "electron-builder --win",
+    "test": "node --test test/**/*.test.js",
     "lint": "eslint .",
     "test-receiver": "npx serve test-receiver -p 3000"
   },
