@@ -40,18 +40,32 @@ class StreamActivity : FragmentActivity() {
         }
         webRtcManager = mgr
 
-        signalingClient = SignalingClient(signalingUrl, mgr)
+        signalingClient = SignalingClient(
+            url = signalingUrl,
+            webRtcManager = mgr,
+            listener = object : SignalingClient.Listener {
+                override fun onConnected() {
+                    runOnUiThread { tvHudStatus.text = "Connected — waiting for stream..." }
+                }
+                override fun onDisconnected(reason: String) {
+                    runOnUiThread { tvHudStatus.text = "Disconnected: $reason" }
+                }
+                override fun onError(message: String) {
+                    runOnUiThread { tvHudStatus.text = "Signaling error: $message" }
+                }
+            },
+        )
         inputHandler = InputHandler(mgr)
 
         mgr.start()
         signalingClient?.connect()
     }
 
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         return inputHandler?.onKeyDown(keyCode) == true || super.onKeyDown(keyCode, event)
     }
 
-    override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
         return inputHandler?.onKeyUp(keyCode) == true || super.onKeyUp(keyCode, event)
     }
 
