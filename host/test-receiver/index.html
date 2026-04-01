@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>StreamBridge — Test Receiver</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #000;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: none;
+    }
+    #overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      background: rgba(0, 0, 0, 0.85);
+      z-index: 10;
+    }
+    #overlay.hidden { display: none; }
+    #status {
+      font-size: 1.1rem;
+      color: #f7c97e;
+    }
+    #unmute-btn {
+      padding: 10px 24px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      background: #7eb8f7;
+      color: #000;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      display: none;
+    }
+    #unmute-btn:hover { opacity: 0.85; }
+    #reconnect-btn {
+      padding: 10px 24px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      background: #7eb8f7;
+      color: #000;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      display: none;
+    }
+    #reconnect-btn:hover { opacity: 0.85; }
+  </style>
+</head>
+<body>
+  <video id="video" autoplay muted playsinline></video>
+
+  <div id="overlay">
+    <div id="status">Connecting to host...</div>
+    <button id="unmute-btn">Click to enable audio</button>
+    <button id="reconnect-btn" onclick="location.reload()">Reconnect</button>
+  </div>
+
+  <script src="receiver.js"></script>
+</body>
+</html>
