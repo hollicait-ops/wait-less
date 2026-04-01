@@ -10,6 +10,16 @@ class InputHandler(private val webRtcManager: WebRTCManager) {
 
     private val mapper = InputMapper()
 
+    // Single source of truth for direction keys — both isDpadDirection and
+    // keyCodeToEvent derive from this map, so adding a new direction key here
+    // is the only change needed.
+    private val dpadToDirection = mapOf(
+        KeyEvent.KEYCODE_DPAD_UP    to InputMapper.Direction.UP,
+        KeyEvent.KEYCODE_DPAD_DOWN  to InputMapper.Direction.DOWN,
+        KeyEvent.KEYCODE_DPAD_LEFT  to InputMapper.Direction.LEFT,
+        KeyEvent.KEYCODE_DPAD_RIGHT to InputMapper.Direction.RIGHT,
+    )
+
     /**
      * Returns true if the key was handled (consumed), false otherwise.
      */
@@ -20,25 +30,21 @@ class InputHandler(private val webRtcManager: WebRTCManager) {
     }
 
     fun onKeyUp(keyCode: Int): Boolean {
-        if (isDpadDirection(keyCode)) mapper.resetAcceleration()
+        if (keyCode in dpadToDirection) mapper.resetAcceleration()
         val event = keyCodeToEvent(keyCode, pressed = false) ?: return false
         webRtcManager.sendDataChannelMessage(event.toJson())
         return true
     }
 
-    private fun isDpadDirection(keyCode: Int) = keyCode == KeyEvent.KEYCODE_DPAD_UP
-        || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
-        || keyCode == KeyEvent.KEYCODE_DPAD_LEFT
-        || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
-
-    private fun keyCodeToEvent(keyCode: Int, pressed: Boolean): InputEvent? = when (keyCode) {
-        KeyEvent.KEYCODE_DPAD_UP        -> mapper.moveCursor(InputMapper.Direction.UP)
-        KeyEvent.KEYCODE_DPAD_DOWN      -> mapper.moveCursor(InputMapper.Direction.DOWN)
-        KeyEvent.KEYCODE_DPAD_LEFT      -> mapper.moveCursor(InputMapper.Direction.LEFT)
-        KeyEvent.KEYCODE_DPAD_RIGHT     -> mapper.moveCursor(InputMapper.Direction.RIGHT)
-        KeyEvent.KEYCODE_DPAD_CENTER,
-        KeyEvent.KEYCODE_ENTER          -> if (pressed) InputEvent.Click("left") else null
-        KeyEvent.KEYCODE_MENU           -> if (pressed) InputEvent.Click("right") else null
-        else                            -> null
+    private fun keyCodeToEvent(keyCode: Int, pressed: Boolean): InputEvent? {
+        dpadToDirection[keyCode]?.let { dir ->
+            return if (pressed) mapper.moveCursor(dir) else null
+        }
+        return when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_CENTER,
+            KeyEvent.KEYCODE_ENTER -> if (pressed) InputEvent.Click("left") else null
+            KeyEvent.KEYCODE_MENU  -> if (pressed) InputEvent.Click("right") else null
+            else                   -> null
+        }
     }
 }
