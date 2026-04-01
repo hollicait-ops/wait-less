@@ -17,9 +17,10 @@ class StreamActivity : FragmentActivity() {
     private lateinit var surfaceView: SurfaceViewRenderer
     private lateinit var tvHudStatus: TextView
 
-    private lateinit var signalingClient: SignalingClient
-    private lateinit var webRtcManager: WebRTCManager
-    private lateinit var inputHandler: InputHandler
+    // Nullable so onDestroy is safe if onCreate exits early (missing EXTRA_HOST_IP)
+    private var signalingClient: SignalingClient? = null
+    private var webRtcManager: WebRTCManager? = null
+    private var inputHandler: InputHandler? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,28 +35,29 @@ class StreamActivity : FragmentActivity() {
         val hostIp = intent.getStringExtra(EXTRA_HOST_IP) ?: run { finish(); return }
         val signalingUrl = "ws://$hostIp:$SIGNALING_PORT"
 
-        webRtcManager = WebRTCManager(this, surfaceView) { status ->
+        val mgr = WebRTCManager(this, surfaceView) { status ->
             runOnUiThread { tvHudStatus.text = status }
         }
+        webRtcManager = mgr
 
-        signalingClient = SignalingClient(signalingUrl, webRtcManager)
-        inputHandler = InputHandler(webRtcManager)
+        signalingClient = SignalingClient(signalingUrl, mgr)
+        inputHandler = InputHandler(mgr)
 
-        webRtcManager.start()
-        signalingClient.connect()
+        mgr.start()
+        signalingClient?.connect()
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        return inputHandler.onKeyDown(keyCode) || super.onKeyDown(keyCode, event)
+        return inputHandler?.onKeyDown(keyCode) == true || super.onKeyDown(keyCode, event)
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
-        return inputHandler.onKeyUp(keyCode) || super.onKeyUp(keyCode, event)
+        return inputHandler?.onKeyUp(keyCode) == true || super.onKeyUp(keyCode, event)
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        signalingClient.disconnect()
-        webRtcManager.dispose()
+        signalingClient?.disconnect()
+        webRtcManager?.dispose()
     }
 }

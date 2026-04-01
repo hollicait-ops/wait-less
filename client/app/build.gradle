@@ -41,7 +41,8 @@ dependencies {
     // Coroutines
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
 
-    // JSON
+    // JSON — Android bundles org.json at runtime, but JVM unit tests do not;
+    // this explicit dependency makes it available in the test source set.
     implementation 'org.json:json:20231013'
 
     // Unit tests (JVM — no emulator required)

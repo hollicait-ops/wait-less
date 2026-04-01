@@ -45,7 +45,8 @@ class SignalingClient(
 
     fun disconnect() {
         ws?.close(1000, "Activity destroyed")
-        client.dispatcher.executorService.shutdown()
+        // Do not shut down client.dispatcher.executorService — OkHttp manages its own
+        // thread pool lifecycle and shutting it down would break any reconnect attempt.
     }
 
     private fun handleMessage(text: String) {

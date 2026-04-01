@@ -20,11 +20,16 @@ class InputHandler(private val webRtcManager: WebRTCManager) {
     }
 
     fun onKeyUp(keyCode: Int): Boolean {
-        mapper.resetAcceleration()
+        if (isDpadDirection(keyCode)) mapper.resetAcceleration()
         val event = keyCodeToEvent(keyCode, pressed = false) ?: return false
         webRtcManager.sendDataChannelMessage(event.toJson())
         return true
     }
+
+    private fun isDpadDirection(keyCode: Int) = keyCode == KeyEvent.KEYCODE_DPAD_UP
+        || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+        || keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+        || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
 
     private fun keyCodeToEvent(keyCode: Int, pressed: Boolean): InputEvent? = when (keyCode) {
         KeyEvent.KEYCODE_DPAD_UP        -> mapper.moveCursor(InputMapper.Direction.UP)
