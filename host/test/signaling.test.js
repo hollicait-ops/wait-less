@@ -26,12 +26,9 @@ function nextMessage(ws) {
 // Closes a WS client and waits for the close event.
 function close(ws) {
   return new Promise((resolve) => {
-    if (ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
-      ws.once('close', resolve);
-      return;
-    }
+    if (ws.readyState === WebSocket.CLOSED) return resolve();
     ws.once('close', resolve);
-    ws.close();
+    if (ws.readyState !== WebSocket.CLOSING) ws.close();
   });
 }
 
