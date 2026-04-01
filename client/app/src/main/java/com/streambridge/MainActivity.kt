@@ -1,6 +1,8 @@
 package com.streambridge
 
+import android.content.Context
 import android.content.Intent
+import android.net.wifi.WifiManager
 import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
@@ -28,6 +30,21 @@ class MainActivity : FragmentActivity() {
                 intent.putExtra(StreamActivity.EXTRA_HOST_IP, ip)
                 startActivity(intent)
             }
+        }
+
+        checkWifiBand()
+    }
+
+    private fun checkWifiBand() {
+        val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        @Suppress("DEPRECATION")
+        val freq = wifiManager.connectionInfo.frequency
+        tvStatus.text = when (wifiBandFromFrequency(freq)) {
+            WifiBand.BAND_2_4_GHZ ->
+                "Warning: connected to 2.4 GHz WiFi. Switch to 5 GHz for best performance."
+            WifiBand.UNKNOWN ->
+                "Warning: could not determine WiFi band. Ensure both devices are on 5 GHz."
+            WifiBand.BAND_5_GHZ -> ""
         }
     }
 }
