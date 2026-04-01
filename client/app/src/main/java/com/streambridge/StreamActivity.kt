@@ -58,6 +58,10 @@ class StreamActivity : FragmentActivity() {
         inputHandler = InputHandler(mgr)
 
         mgr.start()
+
+        val sc = signalingClient
+        if (sc != null) mgr.onSendSignaling = { json -> sc.send(json) }
+
         signalingClient?.connect()
     }
 
