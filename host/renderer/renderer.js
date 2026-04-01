@@ -90,14 +90,16 @@ startBtn.addEventListener('click', async () => {
   const port = await streambridge.getSignalingPort();
   connectSignaling(port);
 
+  let stream;
   try {
     logStatus('Starting screen capture...');
-    const stream = await startCapture();
+    stream = await startCapture();
     logStatus(`Capture started — ${stream.getTracks().length} track(s)`);
     await startWebRTC(stream);
     logStatus('Offer sent — waiting for client to answer');
     streamStatus.textContent = 'Waiting for client...';
   } catch (err) {
+    if (stream) stream.getTracks().forEach(t => t.stop());
     logStatus(`Failed to start: ${err.message}`);
     if (signalingWs) {
       signalingWs.onclose = null;

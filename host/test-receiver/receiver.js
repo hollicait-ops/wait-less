@@ -67,6 +67,8 @@ function connectSignaling() {
       setStatus('Stream ended');
       videoEl.srcObject = null;
       videoEl.style.display = 'none';
+      if (pc) { pc.close(); pc = null; }
+      unmuteBtn.style.display = 'none';
       showOverlay();
       reconnectBtn.style.display = '';
     }
@@ -105,36 +107,38 @@ async function handleOffer(offer) {
   logSdpCodecInfo(offer.sdp);
 
   pc = new RTCPeerConnection({ iceServers: [] });
+  const thisPc = pc;
 
-  pc.onicecandidate = ({ candidate }) => {
+  thisPc.onicecandidate = ({ candidate }) => {
     if (candidate) {
       sendSignaling({ type: 'ice-candidate', candidate });
     }
   };
 
-  pc.oniceconnectionstatechange = () => {
-    console.log('[ice] connection state:', pc.iceConnectionState);
+  thisPc.oniceconnectionstatechange = () => {
+    console.log('[ice] connection state:', thisPc.iceConnectionState);
   };
 
-  pc.onconnectionstatechange = () => {
-    const state = pc.connectionState;
+  thisPc.onconnectionstatechange = () => {
+    const state = thisPc.connectionState;
     console.log('[peer] connection state:', state);
     if (state === 'disconnected' || state === 'failed') {
       setStatus('Stream ended');
       videoEl.srcObject = null;
       videoEl.style.display = 'none';
+      unmuteBtn.style.display = 'none';
       showOverlay();
       reconnectBtn.style.display = '';
     }
   };
 
-  pc.ontrack = (event) => {
+  thisPc.ontrack = (event) => {
     const { track } = event;
     console.log(`[track] ${track.kind} track received (id: ${track.id})`);
 
     // Log codec asynchronously via getStats
     setTimeout(() => {
-      pc.getStats(track).then(stats => {
+      thisPc.getStats(track).then(stats => {
         stats.forEach(report => {
           if (report.type === 'codec') {
             console.log(`[codec] ${track.kind}: ${report.mimeType} (pt ${report.payloadType})`);
@@ -152,10 +156,10 @@ async function handleOffer(offer) {
     }
   };
 
-  await pc.setRemoteDescription(new RTCSessionDescription(offer));
+  await thisPc.setRemoteDescription(new RTCSessionDescription(offer));
 
-  const answer = await pc.createAnswer();
-  await pc.setLocalDescription(answer);
+  const answer = await thisPc.createAnswer();
+  await thisPc.setLocalDescription(answer);
   sendSignaling({ type: answer.type, sdp: answer.sdp });
   console.log('[sdp] answer sent');
 }
