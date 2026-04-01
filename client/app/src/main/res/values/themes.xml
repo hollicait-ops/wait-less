@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.StreamBridge" parent="@android:style/Theme.Leanback">
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+</resources>
