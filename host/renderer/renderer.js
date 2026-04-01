@@ -99,6 +99,12 @@ startBtn.addEventListener('click', async () => {
     streamStatus.textContent = 'Waiting for client...';
   } catch (err) {
     logStatus(`Failed to start: ${err.message}`);
+    if (signalingWs) {
+      signalingWs.onclose = null;
+      signalingWs.close();
+      signalingWs = null;
+    }
+    streamStatus.textContent = 'Waiting for connection...';
     startBtn.disabled = false;
   }
 });
