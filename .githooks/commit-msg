@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Enforce a YouTrack work item ID in every commit message.
+# Accepted prefixes: SB-N  BUG-N  SEC-N
+#
+# Exemptions (automated or internal git operations):
+#   Merge commits     — "Merge ..."
+#   Revert commits    — "Revert ..."
+#   Fixup/squash      — "fixup! ..." / "squash! ..."
+
+MSG=$(cat "$1")
+
+# Skip automated commit types
+case "$MSG" in
+  Merge\ *|Revert\ *|fixup!\ *|squash!\ *) exit 0 ;;
+esac
+
+if echo "$MSG" | grep -qE '(SB|BUG|SEC)-[0-9]+'; then
+  exit 0
+fi
+
+echo ""
+echo "ERROR: commit message must reference a YouTrack work item."
+echo "  Examples: SB-7, BUG-15, SEC-3"
+echo ""
+echo "  Your message:"
+echo "$MSG" | sed 's/^/    /'
+echo ""
+exit 1
