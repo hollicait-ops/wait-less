@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, desktopCapturer } = require('electron');
 const os = require('os');
 const path = require('path');
 const { createSignalingServer } = require('./src/signaling');
@@ -82,6 +82,10 @@ ipcMain.on('input-event', (_event, data) => {
 
 ipcMain.handle('get-local-ip', () => getLocalIP());
 ipcMain.handle('get-signaling-port', () => SIGNALING_PORT);
+ipcMain.handle('get-desktop-sources', async () => {
+  const sources = await desktopCapturer.getSources({ types: ['screen'] });
+  return sources.map(({ id, name }) => ({ id, name }));
+});
 
 app.whenReady().then(() => {
   loadRobotjs();

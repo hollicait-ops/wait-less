@@ -1,11 +1,11 @@
 // Renderer process — WebRTC offerer
 // SB-3: Signaling WS connection + UI wiring
-// SB-4: Screen/audio capture + WebRTC peer connection (next task)
+// SB-4: Screen/audio capture + WebRTC peer connection
 
 const { streambridge } = window;
 
 let signalingWs = null;
-let peerConnection = null; // initialized in SB-4
+let peerConnection = null;
 
 // --- UI refs ---
 const ipDisplay = document.getElementById('ip-display');
@@ -66,7 +66,6 @@ function connectSignaling(port) {
 }
 
 async function handleSignalingMessage(msg) {
-  // Signaling handler — completed in SB-4 when WebRTC peer connection exists
   if (!peerConnection) return;
 
   if (msg.type === 'answer') {
@@ -91,10 +90,20 @@ startBtn.addEventListener('click', async () => {
   const port = await streambridge.getSignalingPort();
   connectSignaling(port);
 
-  // SB-4 will call startCapture() here to begin screen capture + WebRTC offer
+  try {
+    logStatus('Starting screen capture...');
+    const stream = await startCapture();
+    logStatus(`Capture started — ${stream.getTracks().length} track(s)`);
+    await startWebRTC(stream);
+    logStatus('Offer sent — waiting for client to answer');
+    streamStatus.textContent = 'Waiting for client...';
+  } catch (err) {
+    logStatus(`Failed to start: ${err.message}`);
+    startBtn.disabled = false;
+  }
 });
 
-// Hooks for SB-4 — must be set before any signaling messages arrive from the
+// Hooks used by peer.js — set before any signaling messages arrive from the
 // remote peer, otherwise incoming SDP answers and ICE candidates are silently
 // dropped (handleSignalingMessage guards on peerConnection being non-null).
 window.sendSignaling = sendSignaling;
