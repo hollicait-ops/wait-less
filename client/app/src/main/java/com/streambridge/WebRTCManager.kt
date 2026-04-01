@@ -24,7 +24,7 @@ class WebRTCManager(
 ) {
     companion object {
         private const val TAG = "WebRTCManager"
-        private var factoryInitialized = false
+        @Volatile private var factoryInitialized = false
     }
 
     /** Set by StreamActivity after both WebRTCManager and SignalingClient are created. */
@@ -81,11 +81,8 @@ class WebRTCManager(
                                     put("type", "answer")
                                     put("sdp", answer.description)
                                 }
-                                if (onSendSignaling != null) {
-                                    onSendSignaling?.invoke(answerJson)
-                                } else {
-                                    Log.w(TAG, "onSendSignaling not set — answer discarded")
-                                }
+                                onSendSignaling?.invoke(answerJson)
+                                    ?: Log.w(TAG, "onSendSignaling not set — answer discarded")
                             }
                             override fun onSetFailure(error: String?) {
                                 Log.e(TAG, "setLocalDescription failed: $error")
@@ -169,6 +166,7 @@ class WebRTCManager(
                     })
                 }
                 onSendSignaling?.invoke(json)
+                    ?: Log.w(TAG, "onSendSignaling not set — local ICE candidate dropped")
             }
 
             override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>) {}
