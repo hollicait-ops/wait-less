@@ -6,7 +6,8 @@
   "scripts": {
     "start": "electron .",
     "build": "electron-builder --win",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test-receiver": "npx serve test-receiver -p 3000"
   },
   "dependencies": {
     "robotjs": "^0.6.0",
