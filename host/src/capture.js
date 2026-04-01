@@ -28,7 +28,8 @@ async function startCapture() {
         },
       },
     });
-  } catch {
+  } catch (err) {
+    console.warn('[capture] audio loopback failed, falling back to video-only:', err);
     return await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: {
