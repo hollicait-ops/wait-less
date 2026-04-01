@@ -65,6 +65,8 @@ class SignalingClient(
             override fun onMessage(webSocket: WebSocket, text: String) {
                 when (val msg = parseSignalingMessage(text)) {
                     is SignalingMessage.Offer         -> webRtcManager.onRemoteOffer(msg.json)
+                    // Answer path is unused in normal flow (we are the answerer, not the offerer),
+                    // but forwarded for completeness in case of a re-offer scenario.
                     is SignalingMessage.Answer        -> webRtcManager.onRemoteAnswer(msg.json)
                     is SignalingMessage.IceCandidate  -> webRtcManager.onRemoteIceCandidate(msg.json)
                     null                              -> { /* unrecognised — ignore */ }
