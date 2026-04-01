@@ -187,7 +187,12 @@ function logSdpCodecInfo(sdp) {
 unmuteBtn.addEventListener('click', () => {
   videoEl.muted = false;
   unmuteBtn.style.display = 'none';
-  hideOverlay();
+  // Only hide the overlay if the stream is still live — if it ended before
+  // the user unmuted, keep the overlay visible so the Reconnect button remains
+  // accessible.
+  if (videoEl.srcObject) {
+    hideOverlay();
+  }
 });
 
 // --- Boot ---
