@@ -41,9 +41,21 @@ test('mousemove with x out of range is ignored', () => {
   assert.equal(robot.calls.length, 0);
 });
 
+test('mousemove with y out of range is ignored', () => {
+  const robot = mockRobot();
+  replayInputEvent(robot, SCREEN, { type: 'mousemove', x: 0.5, y: -0.1 });
+  assert.equal(robot.calls.length, 0);
+});
+
 test('mousemove with non-number coordinates is ignored', () => {
   const robot = mockRobot();
   replayInputEvent(robot, SCREEN, { type: 'mousemove', x: '0.5', y: 0.5 });
+  assert.equal(robot.calls.length, 0);
+});
+
+test('mousemove with NaN coordinates is ignored', () => {
+  const robot = mockRobot();
+  replayInputEvent(robot, SCREEN, { type: 'mousemove', x: NaN, y: 0.5 });
   assert.equal(robot.calls.length, 0);
 });
 
@@ -59,6 +71,12 @@ test('click right calls mouseClick with right', () => {
   const robot = mockRobot();
   replayInputEvent(robot, SCREEN, { type: 'click', button: 'right' });
   assert.deepEqual(robot.calls, [['mouseClick', 'right']]);
+});
+
+test('click middle calls mouseClick with middle', () => {
+  const robot = mockRobot();
+  replayInputEvent(robot, SCREEN, { type: 'click', button: 'middle' });
+  assert.deepEqual(robot.calls, [['mouseClick', 'middle']]);
 });
 
 test('click with disallowed button is ignored', () => {
@@ -78,6 +96,18 @@ test('scroll calls scrollMouse with x=0 and provided dy', () => {
 test('scroll with non-number dy is ignored', () => {
   const robot = mockRobot();
   replayInputEvent(robot, SCREEN, { type: 'scroll', dy: 'fast' });
+  assert.equal(robot.calls.length, 0);
+});
+
+test('scroll with NaN dy is ignored', () => {
+  const robot = mockRobot();
+  replayInputEvent(robot, SCREEN, { type: 'scroll', dy: NaN });
+  assert.equal(robot.calls.length, 0);
+});
+
+test('scroll with float dy is ignored', () => {
+  const robot = mockRobot();
+  replayInputEvent(robot, SCREEN, { type: 'scroll', dy: 1.5 });
   assert.equal(robot.calls.length, 0);
 });
 

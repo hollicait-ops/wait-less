@@ -56,6 +56,7 @@ async function startWebRTC(stream) {
   dc.onmessage = ({ data }) => {
     let parsed;
     try { parsed = JSON.parse(data); } catch { return; }
+    if (!parsed || typeof parsed !== 'object') return;
     window.streambridge.sendInputEvent(parsed);
   };
 

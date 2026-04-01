@@ -15,13 +15,13 @@ function replayInputEvent(robot, screenSize, data) {
   const { width, height } = screenSize;
 
   if (type === 'mousemove') {
-    if (typeof x !== 'number' || typeof y !== 'number' || x < 0 || x > 1 || y < 0 || y > 1) return;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) return;
     robot.moveMouse(Math.round(x * width), Math.round(y * height));
   } else if (type === 'click') {
     if (!ALLOWED_BUTTONS.has(button)) return;
     robot.mouseClick(button);
   } else if (type === 'scroll') {
-    if (typeof dy !== 'number') return;
+    if (!Number.isInteger(dy)) return;
     robot.scrollMouse(0, dy);
   } else if (type === 'keydown') {
     if (typeof key !== 'string' || key.length === 0 || key.length > 32) return;
