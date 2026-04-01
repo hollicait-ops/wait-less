@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'unsafe-inline'">
+  <title>StreamBridge</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      padding: 24px;
+    }
+    h1 { font-size: 1.4rem; font-weight: 600; color: #7eb8f7; }
+    .ip-block {
+      text-align: center;
+    }
+    .ip-label { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 0.08em; }
+    .ip-value {
+      font-size: 2rem;
+      font-weight: 700;
+      font-family: 'Courier New', monospace;
+      color: #fff;
+      margin-top: 4px;
+    }
+    .port-value { font-size: 0.9rem; color: #aaa; margin-top: 2px; }
+    button {
+      padding: 10px 28px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      background: #7eb8f7;
+      color: #1a1a2e;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    button:disabled { opacity: 0.4; cursor: default; }
+    button:not(:disabled):hover { opacity: 0.85; }
+    #status-log {
+      width: 100%;
+      max-height: 80px;
+      overflow-y: auto;
+      font-size: 0.75rem;
+      font-family: 'Courier New', monospace;
+      color: #7fb97f;
+      background: #0d0d1a;
+      border-radius: 4px;
+      padding: 8px;
+    }
+    .status-line { line-height: 1.5; }
+    #stream-status {
+      font-size: 0.8rem;
+      color: #f7c97e;
+    }
+  </style>
+</head>
+<body>
+  <h1>StreamBridge</h1>
+
+  <div class="ip-block">
+    <div class="ip-label">Enter this IP on Fire Stick</div>
+    <div class="ip-value" id="ip-display">—</div>
+    <div class="port-value">port <span id="port-display">8080</span></div>
+  </div>
+
+  <div id="stream-status">Waiting for connection...</div>
+
+  <button id="start-btn">Start Streaming</button>
+
+  <div id="status-log"></div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
