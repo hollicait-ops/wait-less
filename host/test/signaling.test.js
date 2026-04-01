@@ -13,18 +13,24 @@ function connect(port) {
 }
 
 // Resolves with the next message received on ws.
+// Both once-listeners are removed when either fires to avoid leaks.
 function nextMessage(ws) {
   return new Promise((resolve, reject) => {
-    ws.once('message', (data) => resolve(data.toString()));
-    ws.once('error', reject);
+    function onMessage(data) { ws.removeListener('error', onError); resolve(data.toString()); }
+    function onError(err)    { ws.removeListener('message', onMessage); reject(err); }
+    ws.once('message', onMessage);
+    ws.once('error', onError);
   });
 }
 
 // Closes a WS client and waits for the close event.
 function close(ws) {
   return new Promise((resolve) => {
-    if (ws.readyState === WebSocket.CLOSED) return resolve();
-    ws.on('close', resolve);
+    if (ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+      ws.once('close', resolve);
+      return;
+    }
+    ws.once('close', resolve);
     ws.close();
   });
 }
