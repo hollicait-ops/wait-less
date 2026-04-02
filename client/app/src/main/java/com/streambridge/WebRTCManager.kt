@@ -61,6 +61,7 @@ class WebRTCManager(
     }
 
     fun onRemoteOffer(offer: JSONObject) {
+        Log.i(TAG, "onRemoteOffer: sdp length=${offer.optString("sdp").length}")
         val pc = getOrCreatePeerConnection() ?: run {
             Log.e(TAG, "Failed to create peer connection")
             onStatus("Stream error: could not create connection")
@@ -74,10 +75,13 @@ class WebRTCManager(
 
         pc.setRemoteDescription(object : SimpleSdpObserver() {
             override fun onSetSuccess() {
+                Log.i(TAG, "setRemoteDescription succeeded — creating answer")
                 pc.createAnswer(object : SimpleSdpObserver() {
                     override fun onCreateSuccess(answer: SessionDescription) {
+                        Log.i(TAG, "createAnswer succeeded — setting local description")
                         pc.setLocalDescription(object : SimpleSdpObserver() {
                             override fun onSetSuccess() {
+                                Log.i(TAG, "setLocalDescription succeeded — sending answer")
                                 val answerJson = JSONObject().apply {
                                     put("type", "answer")
                                     put("sdp", answer.description)
@@ -147,6 +151,7 @@ class WebRTCManager(
             override fun onSignalingChange(state: PeerConnection.SignalingState) {}
 
             override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
+                Log.i(TAG, "ICE connection state: $state")
                 val status = when (state) {
                     PeerConnection.IceConnectionState.CONNECTED     -> "Streaming"
                     PeerConnection.IceConnectionState.DISCONNECTED  -> "Stream disconnected"
@@ -161,6 +166,7 @@ class WebRTCManager(
             override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) {}
 
             override fun onIceCandidate(candidate: IceCandidate) {
+                Log.d(TAG, "Local ICE candidate: ${candidate.sdp.take(80)}")
                 val json = JSONObject().apply {
                     put("type", "ice-candidate")
                     put("candidate", JSONObject().apply {

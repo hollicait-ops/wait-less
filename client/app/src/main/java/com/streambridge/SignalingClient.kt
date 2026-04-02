@@ -1,5 +1,6 @@
 package com.streambridge
 
+import android.util.Log
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -46,6 +47,9 @@ class SignalingClient(
     private val webRtcManager: WebRTCManager,
     private val listener: Listener,
 ) {
+    companion object {
+        private const val TAG = "SignalingClient"
+    }
     interface Listener {
         fun onConnected()
         fun onDisconnected(reason: String)
@@ -59,25 +63,29 @@ class SignalingClient(
         val request = Request.Builder().url(url).build()
         ws = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                Log.i(TAG, "Connected to $url")
                 listener.onConnected()
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
+                Log.d(TAG, "Received: ${text.take(120)}")
                 when (val msg = parseSignalingMessage(text)) {
                     is SignalingMessage.Offer         -> webRtcManager.onRemoteOffer(msg.json)
                     // Answer path is unused in normal flow (we are the answerer, not the offerer),
                     // but forwarded for completeness in case of a re-offer scenario.
                     is SignalingMessage.Answer        -> webRtcManager.onRemoteAnswer(msg.json)
                     is SignalingMessage.IceCandidate  -> webRtcManager.onRemoteIceCandidate(msg.json)
-                    null                              -> { /* unrecognised — ignore */ }
+                    null                              -> Log.w(TAG, "Ignored unrecognised message: ${text.take(80)}")
                 }
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                Log.e(TAG, "WebSocket failure: ${t.message}", t)
                 listener.onError(t.message ?: "Unknown error")
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                Log.i(TAG, "Disconnected: code=$code reason=${reason.ifEmpty { "none" }}")
                 listener.onDisconnected(reason.ifEmpty { "Connection closed" })
             }
         })
