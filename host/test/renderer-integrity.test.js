@@ -28,6 +28,27 @@ test('no file in host/ shadows a PATH executable on Windows', () => {
   }
 });
 
+test('CSP connect-src port matches SIGNALING_PORT in main.js', () => {
+  const mainSrc = fs.readFileSync(path.join(HOST_DIR, 'main.js'), 'utf8');
+  const portMatch = mainSrc.match(/\bSIGNALING_PORT\s*=\s*(\d+)/);
+  assert.ok(portMatch, 'Could not find SIGNALING_PORT constant in main.js');
+  const port = portMatch[1];
+
+  const htmlSrc = fs.readFileSync(
+    path.join(HOST_DIR, 'renderer', 'index.html'),
+    'utf8',
+  );
+  const cspMatch = htmlSrc.match(/http-equiv="Content-Security-Policy"[^>]*content="([^"]*)"/);
+  assert.ok(cspMatch, 'Could not find Content-Security-Policy meta tag in index.html');
+  const csp = cspMatch[1];
+
+  assert.ok(
+    csp.includes(`ws://localhost:${port}`),
+    `CSP connect-src must include ws://localhost:${port} to match SIGNALING_PORT. ` +
+    `If you changed the port in main.js, update the connect-src in renderer/index.html too.`,
+  );
+});
+
 test('renderer scripts do not redeclare names exposed by contextBridge', () => {
   const preloadSrc = fs.readFileSync(
     path.join(HOST_DIR, 'renderer', 'preload.js'),
