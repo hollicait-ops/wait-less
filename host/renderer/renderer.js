@@ -4,6 +4,7 @@
 
 let signalingWs = null;
 let peerConnection = null;
+let activeStream = null;
 
 // --- UI refs ---
 const ipDisplay = document.getElementById('ip-display');
@@ -64,6 +65,18 @@ function connectSignaling(port) {
 }
 
 async function handleSignalingMessage(msg) {
+  if (msg.type === 'peer-joined') {
+    if (activeStream) {
+      if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+      }
+      logStatus('Client joined — re-sending offer...');
+      await startWebRTC(activeStream);
+    }
+    return;
+  }
+
   if (!peerConnection) return;
 
   if (msg.type === 'answer') {
@@ -92,6 +105,7 @@ startBtn.addEventListener('click', async () => {
   try {
     logStatus('Starting screen capture...');
     stream = await startCapture();
+    activeStream = stream;
     logStatus(`Capture started — ${stream.getTracks().length} track(s)`);
     await startWebRTC(stream);
     logStatus('Offer sent — waiting for client to answer');
