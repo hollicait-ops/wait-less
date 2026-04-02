@@ -20,6 +20,16 @@ function createSignalingServer(port, onStatus) {
     const peer = req.socket.remoteAddress;
     onStatus(`Peer connected: ${peer} (${wss.clients.size} total)`);
 
+    // Notify existing peers that a new client joined so the renderer can
+    // re-send its offer. The signaling server does not buffer messages, so
+    // a client that connects after the initial offer was sent would never
+    // receive it without this notification.
+    wss.clients.forEach((client) => {
+      if (client !== ws && client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ type: 'peer-joined' }));
+      }
+    });
+
     ws.on('message', (data) => {
       wss.clients.forEach((client) => {
         if (client !== ws && client.readyState === WebSocket.OPEN) {
