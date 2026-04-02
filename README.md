@@ -13,6 +13,15 @@ Architecturally similar to Steam Link: an Electron host captures and streams the
 - Windows 10 or 11
 - [Node.js 20+](https://nodejs.org/en/download)
 - Electron 28+ (installed automatically via `npm install`)
+- `adb` (Android Debug Bridge) on your PATH — used to deploy the app to the Fire Stick over WiFi
+
+  The easiest way to get `adb` is via [Android Studio](https://developer.android.com/studio), which installs it at `%LOCALAPPDATA%\Android\Sdk\platform-tools\`. If you don't want the full IDE, download the [standalone platform-tools zip](https://developer.android.com/tools/releases/platform-tools), extract it (e.g. `C:\platform-tools\`), and add that folder to your PATH:
+
+  ```powershell
+  [Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\platform-tools", "User")
+  ```
+
+  Restart your terminal afterwards and verify with `adb version`.
 
 ### Client (Amazon Fire Stick)
 
