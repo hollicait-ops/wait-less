@@ -109,6 +109,17 @@ async function startWebRTC(stream) {
     const state = pc.connectionState;
     if (state === 'connected') {
       window.updateStreamStatus('Streaming');
+      // Raise the video bitrate so the encoder doesn't aggressively quantise
+      // chroma in flat dark areas, which causes a green cast. 12 Mbps is well
+      // within LAN budget and avoids visible chroma drift in uniform regions.
+      const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+      if (sender) {
+        const params = sender.getParameters();
+        if (params.encodings.length > 0) {
+          params.encodings[0].maxBitrate = 12_000_000;
+          sender.setParameters(params);
+        }
+      }
     } else if (state === 'disconnected' || state === 'failed') {
       window.updateStreamStatus('Disconnected - peer lost');
     }
