@@ -2,8 +2,6 @@
 // SB-3: Signaling WS connection + UI wiring
 // SB-4: Screen/audio capture + WebRTC peer connection
 
-const { streambridge } = window;
-
 let signalingWs = null;
 let peerConnection = null;
 
