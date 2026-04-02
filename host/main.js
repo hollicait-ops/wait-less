@@ -25,7 +25,7 @@ function getLocalIP() {
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 480,
-    height: 320,
+    height: 500,
     resizable: false,
     webPreferences: {
       nodeIntegration: false,
