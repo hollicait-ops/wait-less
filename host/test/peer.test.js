@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { preferH264 } = require('../src/peer');
+const { preferH264, stripColorSpaceExtmap } = require('../src/peer');
 
 // Minimal SDP fixture with video section listing VP8, VP9, H264 (two PTs), H265.
 // The m=video line order is VP8(96), VP9(97), H264(98), H264(99), H265(100).
@@ -138,4 +138,44 @@ test('falls back to reordering all H264 variants when no Constrained Baseline fm
   const mLine = result.split('\r\n').find(l => l.startsWith('m=video'));
   const pts = mLine.split(' ').slice(3);
   assert.deepEqual(pts.slice(0, 2), ['98', '99'], 'all H264 PTs kept and reordered to front');
+});
+
+// --- stripColorSpaceExtmap ---
+
+function makeSdpWithColorSpaceExt() {
+  return [
+    'v=0',
+    'o=- 1 2 IN IP4 127.0.0.1',
+    's=-',
+    't=0 0',
+    'm=video 9 UDP/TLS/RTP/SAVPF 96',
+    'a=extmap:2 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time',
+    'a=extmap:8 http://www.webrtc.org/experiments/rtp-hdrext/color-space',
+    'a=extmap:13 urn:3gpp:video-orientation',
+    'a=rtpmap:96 H264/90000',
+    'm=audio 9 UDP/TLS/RTP/SAVPF 111',
+    'a=extmap:1 urn:ietf:params:rtp-hdrext:ssrc-audio-level',
+    'a=rtpmap:111 opus/48000/2',
+  ].join('\r\n');
+}
+
+test('removes the color-space extmap line from the video section', () => {
+  const result = stripColorSpaceExtmap(makeSdpWithColorSpaceExt());
+  assert.ok(!result.includes('color-space'), 'color-space extmap should be removed');
+});
+
+test('preserves other extmap lines in the video section', () => {
+  const result = stripColorSpaceExtmap(makeSdpWithColorSpaceExt());
+  assert.ok(result.includes('abs-send-time'), 'abs-send-time extmap should be kept');
+  assert.ok(result.includes('video-orientation'), 'video-orientation extmap should be kept');
+});
+
+test('does not touch audio section extmap lines', () => {
+  const result = stripColorSpaceExtmap(makeSdpWithColorSpaceExt());
+  assert.ok(result.includes('ssrc-audio-level'), 'audio extmap should be untouched');
+});
+
+test('returns sdp unchanged when no color-space extmap is present', () => {
+  const sdp = makeSdp();
+  assert.equal(stripColorSpaceExtmap(sdp), sdp);
 });

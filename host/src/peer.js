@@ -11,6 +11,39 @@
 // codec state still references the removed entries.
 const H264_CONSTRAINED_BASELINE_REGEX = /profile-level-id=(42e0|4200)/i;
 
+// Chromium sends per-frame colour space metadata via this RTP header extension.
+// Some versions of the libwebrtc Android library negotiate the extension but
+// misapply it (treating full-range BT.709 content as limited-range BT.601),
+// producing a green cast in dark areas. Removing it from the offer forces both
+// sides to use consistent H.264 stream-level defaults instead.
+const COLOR_SPACE_EXT_URI = 'http://www.webrtc.org/experiments/rtp-hdrext/color-space';
+
+function stripColorSpaceExtmap(sdp) {
+  const lines = sdp.split('\r\n');
+  let videoSection = false;
+  let extId = null;
+
+  for (const line of lines) {
+    if (line.startsWith('m=video')) videoSection = true;
+    else if (line.startsWith('m=')) videoSection = false;
+    if (!videoSection) continue;
+    if (line.includes(COLOR_SPACE_EXT_URI)) {
+      extId = line.match(/a=extmap:(\d+)/)?.[1];
+      break;
+    }
+  }
+
+  if (!extId) return sdp;
+
+  videoSection = false;
+  return lines.filter(line => {
+    if (line.startsWith('m=video')) videoSection = true;
+    else if (line.startsWith('m=')) videoSection = false;
+    if (!videoSection) return true;
+    return !line.startsWith(`a=extmap:${extId} `);
+  }).join('\r\n');
+}
+
 function preferH264(sdp) {
   const lines = sdp.split('\r\n');
   let videoSection = false;
@@ -90,7 +123,7 @@ async function startWebRTC(stream) {
   };
 
   const offer = await pc.createOffer();
-  const mungedSdp = preferH264(offer.sdp);
+  const mungedSdp = stripColorSpaceExtmap(preferH264(offer.sdp));
   await pc.setLocalDescription({ type: offer.type, sdp: mungedSdp });
   window.sendSignaling({ type: offer.type, sdp: mungedSdp });
 
@@ -99,4 +132,4 @@ async function startWebRTC(stream) {
 
 // Allow preferH264 to be required by Node.js tests (peer.js runs in the
 // renderer where module is undefined, so this is a no-op in the browser).
-if (typeof module !== 'undefined') module.exports = { preferH264 };
+if (typeof module !== 'undefined') module.exports = { preferH264, stripColorSpaceExtmap };
