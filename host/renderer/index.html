@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'unsafe-inline'">
+  <!-- connect-src port must match SIGNALING_PORT in main.js -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self' ws://localhost:8080">
   <title>StreamBridge</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -46,7 +47,8 @@
     button:not(:disabled):hover { opacity: 0.85; }
     #status-log {
       width: 100%;
-      max-height: 80px;
+      flex: 1;
+      min-height: 120px;
       overflow-y: auto;
       font-size: 0.75rem;
       font-family: 'Courier New', monospace;
