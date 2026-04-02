@@ -62,6 +62,29 @@ test('relays a message from one client to another', async () => {
   await Promise.all([close(a), close(b)]);
 });
 
+// Regression test for BUG-28: ws 8.x delivers text frames to the message
+// handler as Buffer objects. If the relay calls client.send(buffer) without
+// { binary: false }, ws sends a binary frame. OkHttp on Android routes binary
+// frames to onMessage(WebSocket, ByteString) which SignalingClient does not
+// override, silently dropping every SDP/ICE message and preventing the stream
+// from ever starting.
+test('relays text frames as text frames, not binary', async () => {
+  const [a, b] = await Promise.all([connect(port), connect(port)]);
+
+  let receivedIsBinary = null;
+  const received = new Promise((resolve) => {
+    b.once('message', (data, isBinary) => {
+      receivedIsBinary = isBinary;
+      resolve();
+    });
+  });
+
+  a.send('{"type":"offer","sdp":"test"}');
+  await received;
+  assert.equal(receivedIsBinary, false, 'text frames must be relayed as text frames, not binary');
+  await Promise.all([close(a), close(b)]);
+});
+
 test('does not echo the message back to the sender', async () => {
   const [a, b] = await Promise.all([connect(port), connect(port)]);
 

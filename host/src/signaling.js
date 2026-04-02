@@ -30,10 +30,10 @@ function createSignalingServer(port, onStatus) {
       }
     });
 
-    ws.on('message', (data) => {
+    ws.on('message', (data, isBinary) => {
       wss.clients.forEach((client) => {
         if (client !== ws && client.readyState === WebSocket.OPEN) {
-          client.send(data);
+          client.send(data, { binary: isBinary });
         }
       });
     });
