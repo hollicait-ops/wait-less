@@ -2,7 +2,11 @@ package com.streambridge
 
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
@@ -36,9 +40,7 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun checkWifiBand() {
-        val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        @Suppress("DEPRECATION")
-        val freq = wifiManager.connectionInfo.frequency
+        val freq = getWifiFrequencyMhz()
         tvStatus.text = when (wifiBandFromFrequency(freq)) {
             WifiBand.BAND_2_4_GHZ ->
                 "Warning: connected to 2.4 GHz WiFi. Switch to 5 GHz for best performance."
@@ -46,5 +48,17 @@ class MainActivity : FragmentActivity() {
                 "Warning: could not determine WiFi band. Ensure both devices are on 5 GHz."
             WifiBand.BAND_5_GHZ -> ""
         }
+    }
+
+    private fun getWifiFrequencyMhz(): Int {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val cm = applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val caps = cm.getNetworkCapabilities(cm.activeNetwork)
+            val wifiInfo = caps?.transportInfo as? WifiInfo
+            if (wifiInfo != null) return wifiInfo.frequency
+        }
+        @Suppress("DEPRECATION")
+        return (applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager)
+            .connectionInfo.frequency
     }
 }
