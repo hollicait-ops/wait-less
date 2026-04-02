@@ -1,18 +1,21 @@
 // peer.js — WebRTC peer connection management (renderer process)
 // LAN-only: no STUN/TURN needed since both peers are on the same subnet.
 
-// Target profile: H.264 Constrained Baseline (profile-level-id prefix 42e0
-// or 4200). This profile is hardware-decoded on every Android device and uses
-// a single well-defined YUV colour matrix, avoiding the colour shifts seen
-// when High/Main profiles are negotiated and encoder/decoder disagree on the
-// colour space transform.
+// Matches H.264 Constrained Baseline profile-level-id values (42e0xx / 4200xx).
+// This profile uses a single well-defined YUV colour matrix and is hardware-
+// decoded on every Android device, avoiding colour shifts from encoder/decoder
+// disagreement on colour space when High/Main profiles are negotiated.
+//
+// We reorder rather than remove non-baseline PTs: removing PTs from a munged
+// offer causes Chromium to reject setLocalDescription because its internal
+// codec state still references the removed entries.
 const H264_CONSTRAINED_BASELINE_REGEX = /profile-level-id=(42e0|4200)/i;
 
 function preferH264(sdp) {
   const lines = sdp.split('\r\n');
   let videoSection = false;
   const allH264Pts = [];
-  const baselinePts = [];
+  const baselinePts = new Set();
 
   for (const line of lines) {
     if (line.startsWith('m=video')) videoSection = true;
@@ -25,32 +28,27 @@ function preferH264(sdp) {
     }
     if (/a=fmtp:/.test(line) && H264_CONSTRAINED_BASELINE_REGEX.test(line)) {
       const pt = line.match(/a=fmtp:(\d+)/)[1];
-      baselinePts.push(pt);
+      baselinePts.add(pt);
     }
   }
 
-  // Use Constrained Baseline if available; fall back to all H.264 variants.
-  const preferredPts = baselinePts.length > 0 ? baselinePts : allH264Pts;
-  if (preferredPts.length === 0) return sdp;
+  if (allH264Pts.length === 0) return sdp;
 
-  // Remove payload types for non-preferred H.264 variants and their fmtp/rtcp-fb lines.
-  const droppedPts = allH264Pts.filter(pt => !preferredPts.includes(pt));
+  // Within H264, put Constrained Baseline variants first so the remote peer
+  // prefers them. All PTs are preserved — no lines are removed.
+  const orderedH264 = [
+    ...allH264Pts.filter(pt => baselinePts.has(pt)),
+    ...allH264Pts.filter(pt => !baselinePts.has(pt)),
+  ];
 
-  return lines
-    .filter(line => {
-      if (droppedPts.length === 0) return true;
-      const ptMatch = line.match(/^a=(?:rtpmap|fmtp|rtcp-fb):(\d+)/);
-      return !(ptMatch && droppedPts.includes(ptMatch[1]));
-    })
-    .map(line => {
-      if (!line.startsWith('m=video')) return line;
-      const parts = line.split(' ');
-      const pts = parts.slice(3);
-      const preferred = pts.filter(pt => preferredPts.includes(pt));
-      const rest = pts.filter(pt => !preferredPts.includes(pt) && !droppedPts.includes(pt));
-      return `${parts[0]} ${parts[1]} ${parts[2]} ${[...preferred, ...rest].join(' ')}`;
-    })
-    .join('\r\n');
+  return lines.map(line => {
+    if (!line.startsWith('m=video')) return line;
+    const parts = line.split(' ');
+    const pts = parts.slice(3);
+    const h264 = orderedH264.filter(pt => pts.includes(pt));
+    const rest = pts.filter(pt => !allH264Pts.includes(pt));
+    return `${parts[0]} ${parts[1]} ${parts[2]} ${[...h264, ...rest].join(' ')}`;
+  }).join('\r\n');
 }
 
 async function startWebRTC(stream) {

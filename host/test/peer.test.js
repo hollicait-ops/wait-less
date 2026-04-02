@@ -107,31 +107,35 @@ function makeSdpWithProfiles() {
   ].join('\r\n');
 }
 
-test('pins to Constrained Baseline H264 when fmtp profile lines are present', () => {
+test('puts Constrained Baseline H264 first when fmtp profile lines are present', () => {
   const result = preferH264(makeSdpWithProfiles());
   const mLine = result.split('\r\n').find(l => l.startsWith('m=video'));
   const pts = mLine.split(' ').slice(3);
   assert.equal(pts[0], '98', 'Constrained Baseline PT should be first');
-  assert.ok(!pts.includes('99'), 'High Profile PT should be removed from m=video');
+  assert.ok(pts.includes('99'), 'High Profile PT should still be present');
 });
 
-test('removes rtpmap, fmtp, and rtcp-fb lines for non-baseline H264 profiles', () => {
+test('preserves all rtpmap, fmtp, and rtcp-fb lines — no PTs removed', () => {
   const lines = preferH264(makeSdpWithProfiles()).split('\r\n');
-  assert.ok(!lines.some(l => /profile-level-id=640032/i.test(l)), 'High Profile fmtp should be removed');
-  assert.ok(!lines.some(l => /^a=rtpmap:99 /.test(l)), 'High Profile rtpmap should be removed');
-  assert.ok(!lines.some(l => /^a=rtcp-fb:99 /.test(l)), 'High Profile rtcp-fb should be removed');
-});
-
-test('keeps Constrained Baseline fmtp and rtcp-fb lines', () => {
-  const lines = preferH264(makeSdpWithProfiles()).split('\r\n');
+  assert.ok(lines.some(l => /profile-level-id=640032/i.test(l)), 'High Profile fmtp should be kept');
+  assert.ok(lines.some(l => /^a=rtpmap:99 /.test(l)), 'High Profile rtpmap should be kept');
+  assert.ok(lines.some(l => /^a=rtcp-fb:99 /.test(l)), 'High Profile rtcp-fb should be kept');
   assert.ok(lines.some(l => /profile-level-id=42e01f/i.test(l)), 'Baseline fmtp should be kept');
   assert.ok(lines.some(l => /^a=rtcp-fb:98 /.test(l)), 'Baseline rtcp-fb should be kept');
 });
 
-test('falls back to all H264 variants when no Constrained Baseline fmtp present', () => {
-  // makeSdp() has no fmtp lines so no profile can be identified
+test('High Profile PT follows Constrained Baseline in m=video line', () => {
+  const result = preferH264(makeSdpWithProfiles());
+  const mLine = result.split('\r\n').find(l => l.startsWith('m=video'));
+  const pts = mLine.split(' ').slice(3);
+  const idx98 = pts.indexOf('98');
+  const idx99 = pts.indexOf('99');
+  assert.ok(idx98 < idx99, 'Constrained Baseline (98) should precede High Profile (99)');
+});
+
+test('falls back to reordering all H264 variants when no Constrained Baseline fmtp present', () => {
   const result = preferH264(makeSdp());
   const mLine = result.split('\r\n').find(l => l.startsWith('m=video'));
   const pts = mLine.split(' ').slice(3);
-  assert.deepEqual(pts.slice(0, 2), ['98', '99'], 'all H264 PTs kept when no baseline fmtp');
+  assert.deepEqual(pts.slice(0, 2), ['98', '99'], 'all H264 PTs kept and reordered to front');
 });
