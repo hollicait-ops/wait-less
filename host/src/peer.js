@@ -1,34 +1,65 @@
 // peer.js — WebRTC peer connection management (renderer process)
 // LAN-only: no STUN/TURN needed since both peers are on the same subnet.
 
+// Target profile: H.264 Constrained Baseline (profile-level-id prefix 42e0
+// or 4200). This profile is hardware-decoded on every Android device and uses
+// a single well-defined YUV colour matrix, avoiding the colour shifts seen
+// when High/Main profiles are negotiated and encoder/decoder disagree on the
+// colour space transform.
+const H264_CONSTRAINED_BASELINE_REGEX = /profile-level-id=(42e0|4200)/i;
+
 function preferH264(sdp) {
   const lines = sdp.split('\r\n');
   let videoSection = false;
-  const h264Pts = [];
+  const allH264Pts = [];
+  const baselinePts = [];
 
   for (const line of lines) {
     if (line.startsWith('m=video')) videoSection = true;
     else if (line.startsWith('m=')) videoSection = false;
-    if (videoSection && /a=rtpmap:\d+ H264/i.test(line)) {
+    if (!videoSection) continue;
+
+    if (/a=rtpmap:\d+ H264/i.test(line)) {
       const pt = line.match(/a=rtpmap:(\d+)/)[1];
-      h264Pts.push(pt);
+      allH264Pts.push(pt);
+    }
+    if (/a=fmtp:/.test(line) && H264_CONSTRAINED_BASELINE_REGEX.test(line)) {
+      const pt = line.match(/a=fmtp:(\d+)/)[1];
+      baselinePts.push(pt);
     }
   }
 
-  if (h264Pts.length === 0) return sdp;
+  // Use Constrained Baseline if available; fall back to all H.264 variants.
+  const preferredPts = baselinePts.length > 0 ? baselinePts : allH264Pts;
+  if (preferredPts.length === 0) return sdp;
 
-  return lines.map(line => {
-    if (!line.startsWith('m=video')) return line;
-    const parts = line.split(' ');
-    const pts = parts.slice(3);
-    const h264 = pts.filter(pt => h264Pts.includes(pt));
-    const rest = pts.filter(pt => !h264Pts.includes(pt));
-    return `${parts[0]} ${parts[1]} ${parts[2]} ${[...h264, ...rest].join(' ')}`;
-  }).join('\r\n');
+  // Remove payload types for non-preferred H.264 variants and their fmtp/rtcp-fb lines.
+  const droppedPts = allH264Pts.filter(pt => !preferredPts.includes(pt));
+
+  return lines
+    .filter(line => {
+      if (droppedPts.length === 0) return true;
+      const ptMatch = line.match(/^a=(?:rtpmap|fmtp|rtcp-fb):(\d+)/);
+      return !(ptMatch && droppedPts.includes(ptMatch[1]));
+    })
+    .map(line => {
+      if (!line.startsWith('m=video')) return line;
+      const parts = line.split(' ');
+      const pts = parts.slice(3);
+      const preferred = pts.filter(pt => preferredPts.includes(pt));
+      const rest = pts.filter(pt => !preferredPts.includes(pt) && !droppedPts.includes(pt));
+      return `${parts[0]} ${parts[1]} ${parts[2]} ${[...preferred, ...rest].join(' ')}`;
+    })
+    .join('\r\n');
 }
 
 async function startWebRTC(stream) {
   const pc = new RTCPeerConnection({ iceServers: [] });
+
+  // Hint to the encoder that this is screen content, not a camera feed.
+  // 'detail' mode preserves sharp edges and accurate colours; the default
+  // motion-optimised mode applies camera-style YUV encoding that shifts hues.
+  stream.getVideoTracks().forEach(track => { track.contentHint = 'detail'; });
 
   stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
