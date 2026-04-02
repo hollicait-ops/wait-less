@@ -66,7 +66,12 @@ test('does not echo the message back to the sender', async () => {
   const [a, b] = await Promise.all([connect(port), connect(port)]);
 
   let senderGotMessage = false;
-  a.on('message', () => { senderGotMessage = true; });
+  // Exclude peer-joined — it is server-generated when b connected and may
+  // arrive on a after this listener is registered.
+  a.on('message', (data) => {
+    const msg = JSON.parse(data.toString());
+    if (msg.type !== 'peer-joined') senderGotMessage = true;
+  });
 
   const received = nextMessage(b);
   a.send('{"type":"ice-candidate","candidate":{}}');
@@ -121,5 +126,24 @@ test('single connected client does not error when sending', async () => {
   const a = await connect(port);
   // No other client — message goes nowhere, but should not throw
   assert.doesNotThrow(() => a.send('{"type":"offer"}'));
+  await close(a);
+});
+
+test('existing peer receives peer-joined when a second client connects', async () => {
+  const a = await connect(port);
+  const notification = nextMessage(a);
+  const b = await connect(port);
+  const msg = JSON.parse(await notification);
+  assert.equal(msg.type, 'peer-joined');
+  await Promise.all([close(a), close(b)]);
+});
+
+test('first client connecting to empty server does not receive peer-joined', async () => {
+  const a = await connect(port);
+  let gotMessage = false;
+  a.on('message', () => { gotMessage = true; });
+  // Give time for any spurious message to arrive
+  await new Promise(r => setTimeout(r, 30));
+  assert.equal(gotMessage, false);
   await close(a);
 });
