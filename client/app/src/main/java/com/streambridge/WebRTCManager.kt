@@ -68,10 +68,11 @@ class WebRTCManager(
             return
         }
 
-        val remoteSdp = SessionDescription(
-            SessionDescription.Type.OFFER,
-            offer.optString("sdp"),
-        )
+        val sdpString = offer.optString("sdp")
+        sdpString.lines().filter { it.contains("profile-level-id", ignoreCase = true) || it.startsWith("b=AS:") }
+            .forEach { Log.i(TAG, "SDP offer: $it") }
+
+        val remoteSdp = SessionDescription(SessionDescription.Type.OFFER, sdpString)
 
         pc.setRemoteDescription(object : SimpleSdpObserver() {
             override fun onSetSuccess() {
@@ -79,6 +80,9 @@ class WebRTCManager(
                 pc.createAnswer(object : SimpleSdpObserver() {
                     override fun onCreateSuccess(answer: SessionDescription) {
                         Log.i(TAG, "createAnswer succeeded — setting local description")
+                        answer.description.lines()
+                            .filter { it.contains("profile-level-id", ignoreCase = true) || it.startsWith("b=AS:") }
+                            .forEach { Log.i(TAG, "SDP answer: $it") }
                         pc.setLocalDescription(object : SimpleSdpObserver() {
                             override fun onSetSuccess() {
                                 Log.i(TAG, "setLocalDescription succeeded — sending answer")
