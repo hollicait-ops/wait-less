@@ -46,9 +46,9 @@ class ScreenVideoRenderer @JvmOverloads constructor(
 
     private inner class I420Renderer : GLSurfaceView.Renderer {
 
-        // BT.709 studio swing (ITU-R BT.709-6 Table 3):
-        //   16/255 ≈ 0.0627 — limited-range black offset for Y
-        //  128/255 ≈ 0.5020 — chroma centre
+        // BT.601 studio swing (limited range) — matches libyuv ARGBToI420 output.
+        // G_GAIN trims any residual green cast from encoder-specific matrix drift;
+        // 0.97 is a 3% reduction, tune towards 1.0 if the image looks too magenta.
         private val fragSrc = """
             precision mediump float;
             uniform sampler2D y_tex;
@@ -59,9 +59,9 @@ class ScreenVideoRenderer @JvmOverloads constructor(
                 float y  = texture2D(y_tex, v_tc).r - 0.0627;
                 float cb = texture2D(u_tex, v_tc).r - 0.5020;
                 float cr = texture2D(v_tex, v_tc).r - 0.5020;
-                float r = clamp(1.1644*y + 1.7927*cr,             0.0, 1.0);
-                float g = clamp(1.1644*y - 0.2133*cb - 0.5329*cr, 0.0, 1.0);
-                float b = clamp(1.1644*y + 2.1124*cb,             0.0, 1.0);
+                float r = clamp(1.1644*y + 1.5960*cr,              0.0, 1.0);
+                float g = clamp((1.1644*y - 0.3918*cb - 0.8130*cr) * 0.97, 0.0, 1.0);
+                float b = clamp(1.1644*y + 2.0172*cb,              0.0, 1.0);
                 gl_FragColor = vec4(r, g, b, 1.0);
             }
         """.trimIndent()
@@ -88,10 +88,13 @@ class ScreenVideoRenderer @JvmOverloads constructor(
             program = linkProgram(compileShader(GLES20.GL_VERTEX_SHADER, vertSrc),
                                   compileShader(GLES20.GL_FRAGMENT_SHADER, fragSrc))
             GLES20.glGenTextures(3, texIds, 0)
-            for (id in texIds) {
+            // Nearest-neighbour for all planes: screen content has hard pixel edges
+            // and any chroma interpolation causes colour fringing around lines/text.
+            for ((i, id) in texIds.withIndex()) {
+                val filter = GLES20.GL_NEAREST
                 GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, id)
-                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
-                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, filter)
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, filter)
                 GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
                 GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
             }
