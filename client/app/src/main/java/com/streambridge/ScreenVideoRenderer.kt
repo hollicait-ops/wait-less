@@ -85,7 +85,7 @@ class ScreenVideoRenderer @JvmOverloads constructor(
         private val texIds = IntArray(3)
         private var yLoc = 0; private var uLoc = 0; private var vLoc = 0
         private var posLoc = 0; private var tcLoc = 0; private var scaleLoc = 0
-        private var viewW = 1; private var viewH = 1
+        private var viewW = 0; private var viewH = 0
 
         override fun onSurfaceCreated(unused: GL10?, config: EGLConfig?) {
             program = linkProgram(compileShader(GLES20.GL_VERTEX_SHADER, vertSrc),
@@ -101,7 +101,6 @@ class ScreenVideoRenderer @JvmOverloads constructor(
                 GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
                 GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
             }
-            GLES20.glUseProgram(program)
             yLoc   = GLES20.glGetUniformLocation(program, "y_tex")
             uLoc   = GLES20.glGetUniformLocation(program, "u_tex")
             vLoc   = GLES20.glGetUniformLocation(program, "v_tex")
@@ -116,6 +115,7 @@ class ScreenVideoRenderer @JvmOverloads constructor(
         }
 
         override fun onDrawFrame(unused: GL10?) {
+            if (viewW == 0 || viewH == 0) return
             val frame = synchronized(frameLock) { pendingFrame.also { pendingFrame = null } }
                 ?: return
 
