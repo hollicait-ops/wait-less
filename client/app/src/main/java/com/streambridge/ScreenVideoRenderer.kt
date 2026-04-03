@@ -70,8 +70,9 @@ class ScreenVideoRenderer @JvmOverloads constructor(
         private val vertSrc = """
             attribute vec2 a_pos;
             attribute vec2 a_tc;
+            uniform vec2 u_scale;
             varying vec2 v_tc;
-            void main() { gl_Position = vec4(a_pos, 0.0, 1.0); v_tc = a_tc; }
+            void main() { gl_Position = vec4(a_pos * u_scale, 0.0, 1.0); v_tc = a_tc; }
         """.trimIndent()
 
         // Full-screen quad, triangle-strip order: BL, BR, TL, TR.
@@ -83,7 +84,8 @@ class ScreenVideoRenderer @JvmOverloads constructor(
         private var program = 0
         private val texIds = IntArray(3)
         private var yLoc = 0; private var uLoc = 0; private var vLoc = 0
-        private var posLoc = 0; private var tcLoc = 0
+        private var posLoc = 0; private var tcLoc = 0; private var scaleLoc = 0
+        private var viewW = 1; private var viewH = 1
 
         override fun onSurfaceCreated(unused: GL10?, config: EGLConfig?) {
             program = linkProgram(compileShader(GLES20.GL_VERTEX_SHADER, vertSrc),
@@ -103,12 +105,14 @@ class ScreenVideoRenderer @JvmOverloads constructor(
             yLoc   = GLES20.glGetUniformLocation(program, "y_tex")
             uLoc   = GLES20.glGetUniformLocation(program, "u_tex")
             vLoc   = GLES20.glGetUniformLocation(program, "v_tex")
-            posLoc = GLES20.glGetAttribLocation(program, "a_pos")
-            tcLoc  = GLES20.glGetAttribLocation(program, "a_tc")
+            posLoc  = GLES20.glGetAttribLocation(program, "a_pos")
+            tcLoc   = GLES20.glGetAttribLocation(program, "a_tc")
+            scaleLoc = GLES20.glGetUniformLocation(program, "u_scale")
         }
 
         override fun onSurfaceChanged(unused: GL10?, w: Int, h: Int) {
             GLES20.glViewport(0, 0, w, h)
+            viewW = w; viewH = h
         }
 
         override fun onDrawFrame(unused: GL10?) {
@@ -122,8 +126,18 @@ class ScreenVideoRenderer @JvmOverloads constructor(
                     upload(texIds[1], i420.width / 2, i420.height / 2, i420.dataU, i420.strideU)
                     upload(texIds[2], i420.width / 2, i420.height / 2, i420.dataV, i420.strideV)
 
+                    // Scale the quad to preserve the frame's aspect ratio.
+                    // If the frame is wider than the viewport, fit to width and
+                    // letterbox top/bottom; otherwise fit to height and pillarbox.
+                    val frameAspect = i420.width.toFloat() / i420.height
+                    val viewAspect  = viewW.toFloat() / viewH
+                    val sx: Float; val sy: Float
+                    if (frameAspect > viewAspect) { sx = 1f; sy = viewAspect / frameAspect }
+                    else                          { sx = frameAspect / viewAspect; sy = 1f }
+
                     GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
                     GLES20.glUseProgram(program)
+                    GLES20.glUniform2f(scaleLoc, sx, sy)
 
                     bindTex(0, texIds[0], yLoc)
                     bindTex(1, texIds[1], uLoc)
