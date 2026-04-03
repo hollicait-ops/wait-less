@@ -1,0 +1,193 @@
+package com.streambridge
+
+import android.content.Context
+import android.opengl.GLES20
+import android.opengl.GLSurfaceView
+import android.util.AttributeSet
+import android.util.Log
+import org.webrtc.VideoFrame
+import org.webrtc.VideoSink
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.FloatBuffer
+import javax.microedition.khronos.egl.EGLConfig
+import javax.microedition.khronos.opengles.GL10
+
+/**
+ * WebRTC VideoSink that renders I420 frames using a BT.601 limited-range
+ * YUV→RGB shader with a 0.97 G-channel gain to correct encoder-specific
+ * colour drift. Replaces SurfaceViewRenderer to bypass the Fire OS hardware
+ * decoder's incorrect colour matrix.
+ *
+ * The decoder is kept as SoftwareVideoDecoderFactory so frames arrive as
+ * I420 buffers — no OES texture path required.
+ */
+class ScreenVideoRenderer @JvmOverloads constructor(
+    context: Context,
+    attrs: AttributeSet? = null,
+) : GLSurfaceView(context, attrs), VideoSink {
+
+    private val frameLock = Any()
+    private var pendingFrame: VideoFrame? = null
+
+    init {
+        setEGLContextClientVersion(2)
+        setRenderer(I420Renderer())
+        renderMode = RENDERMODE_WHEN_DIRTY
+    }
+
+    override fun onFrame(frame: VideoFrame) {
+        frame.retain()
+        synchronized(frameLock) {
+            pendingFrame?.release()
+            pendingFrame = frame
+        }
+        requestRender()
+    }
+
+    private inner class I420Renderer : GLSurfaceView.Renderer {
+
+        // BT.601 studio swing (limited range) — matches libyuv ARGBToI420 output.
+        // G_GAIN trims any residual green cast from encoder-specific matrix drift;
+        // 0.97 is a 3% reduction, tune towards 1.0 if the image looks too magenta.
+        private val fragSrc = """
+            precision mediump float;
+            uniform sampler2D y_tex;
+            uniform sampler2D u_tex;
+            uniform sampler2D v_tex;
+            varying vec2 v_tc;
+            void main() {
+                float y  = texture2D(y_tex, v_tc).r - 0.0627;
+                float cb = texture2D(u_tex, v_tc).r - 0.5020;
+                float cr = texture2D(v_tex, v_tc).r - 0.5020;
+                float r = clamp(1.1644*y + 1.5960*cr,              0.0, 1.0);
+                float g = clamp((1.1644*y - 0.3918*cb - 0.8130*cr) * 0.97, 0.0, 1.0);
+                float b = clamp(1.1644*y + 2.0172*cb,              0.0, 1.0);
+                gl_FragColor = vec4(r, g, b, 1.0);
+            }
+        """.trimIndent()
+
+        private val vertSrc = """
+            attribute vec2 a_pos;
+            attribute vec2 a_tc;
+            varying vec2 v_tc;
+            void main() { gl_Position = vec4(a_pos, 0.0, 1.0); v_tc = a_tc; }
+        """.trimIndent()
+
+        // Full-screen quad, triangle-strip order: BL, BR, TL, TR.
+        // Texture Y is flipped (1→0 top-to-bottom) because glTexImage2D treats
+        // row 0 of the buffer as the bottom of the texture.
+        private val quadPos: FloatBuffer = buf(floatArrayOf(-1f, -1f,  1f, -1f,  -1f, 1f,  1f, 1f))
+        private val quadTc:  FloatBuffer = buf(floatArrayOf( 0f,  1f,  1f,  1f,   0f, 0f,  1f, 0f))
+
+        private var program = 0
+        private val texIds = IntArray(3)
+        private var yLoc = 0; private var uLoc = 0; private var vLoc = 0
+        private var posLoc = 0; private var tcLoc = 0
+
+        override fun onSurfaceCreated(unused: GL10?, config: EGLConfig?) {
+            program = linkProgram(compileShader(GLES20.GL_VERTEX_SHADER, vertSrc),
+                                  compileShader(GLES20.GL_FRAGMENT_SHADER, fragSrc))
+            GLES20.glGenTextures(3, texIds, 0)
+            // Nearest-neighbour for all planes: screen content has hard pixel edges
+            // and any chroma interpolation causes colour fringing around lines/text.
+            for (id in texIds) {
+                val filter = GLES20.GL_NEAREST
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, id)
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, filter)
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, filter)
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
+            }
+            GLES20.glUseProgram(program)
+            yLoc   = GLES20.glGetUniformLocation(program, "y_tex")
+            uLoc   = GLES20.glGetUniformLocation(program, "u_tex")
+            vLoc   = GLES20.glGetUniformLocation(program, "v_tex")
+            posLoc = GLES20.glGetAttribLocation(program, "a_pos")
+            tcLoc  = GLES20.glGetAttribLocation(program, "a_tc")
+        }
+
+        override fun onSurfaceChanged(unused: GL10?, w: Int, h: Int) {
+            GLES20.glViewport(0, 0, w, h)
+        }
+
+        override fun onDrawFrame(unused: GL10?) {
+            val frame = synchronized(frameLock) { pendingFrame.also { pendingFrame = null } }
+                ?: return
+
+            try {
+                val i420 = frame.buffer.toI420() ?: run { frame.release(); return }
+                try {
+                    upload(texIds[0], i420.width,     i420.height,     i420.dataY, i420.strideY)
+                    upload(texIds[1], i420.width / 2, i420.height / 2, i420.dataU, i420.strideU)
+                    upload(texIds[2], i420.width / 2, i420.height / 2, i420.dataV, i420.strideV)
+
+                    GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+                    GLES20.glUseProgram(program)
+
+                    bindTex(0, texIds[0], yLoc)
+                    bindTex(1, texIds[1], uLoc)
+                    bindTex(2, texIds[2], vLoc)
+
+                    GLES20.glEnableVertexAttribArray(posLoc)
+                    GLES20.glVertexAttribPointer(posLoc, 2, GLES20.GL_FLOAT, false, 0, quadPos)
+                    GLES20.glEnableVertexAttribArray(tcLoc)
+                    GLES20.glVertexAttribPointer(tcLoc,  2, GLES20.GL_FLOAT, false, 0, quadTc)
+                    GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+                } finally {
+                    i420.release()
+                }
+            } finally {
+                frame.release()
+            }
+        }
+
+        private fun upload(texId: Int, w: Int, h: Int, data: ByteBuffer, stride: Int) {
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texId)
+            val compact = if (stride == w) {
+                data.also { it.position(0) }
+            } else {
+                val out = ByteBuffer.allocateDirect(w * h)
+                val row = ByteArray(w)
+                for (r in 0 until h) {
+                    data.position(r * stride)
+                    data.get(row)
+                    out.put(row)
+                }
+                out.also { it.position(0) }
+            }
+            GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_LUMINANCE,
+                w, h, 0, GLES20.GL_LUMINANCE, GLES20.GL_UNSIGNED_BYTE, compact)
+        }
+
+        private fun bindTex(unit: Int, texId: Int, loc: Int) {
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE0 + unit)
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texId)
+            GLES20.glUniform1i(loc, unit)
+        }
+
+        private fun compileShader(type: Int, src: String): Int {
+            val id = GLES20.glCreateShader(type)
+            GLES20.glShaderSource(id, src)
+            GLES20.glCompileShader(id)
+            val status = IntArray(1)
+            GLES20.glGetShaderiv(id, GLES20.GL_COMPILE_STATUS, status, 0)
+            if (status[0] == 0) Log.e("ScreenVideoRenderer", "Shader compile error: ${GLES20.glGetShaderInfoLog(id)}")
+            return id
+        }
+
+        private fun linkProgram(vs: Int, fs: Int): Int {
+            val prog = GLES20.glCreateProgram()
+            GLES20.glAttachShader(prog, vs)
+            GLES20.glAttachShader(prog, fs)
+            GLES20.glLinkProgram(prog)
+            return prog
+        }
+
+        private fun buf(data: FloatArray): FloatBuffer =
+            ByteBuffer.allocateDirect(data.size * 4)
+                .order(ByteOrder.nativeOrder())
+                .asFloatBuffer()
+                .also { it.put(data); it.position(0) }
+    }
+}

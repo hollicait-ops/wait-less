@@ -5,7 +5,7 @@
     android:background="@android:color/black">
 
     <!-- WebRTC video renderer — filled by WebRTCManager -->
-    <org.webrtc.SurfaceViewRenderer
+    <com.streambridge.ScreenVideoRenderer
         android:id="@+id/surface_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
