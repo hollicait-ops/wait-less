@@ -14,9 +14,10 @@ import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 
 /**
- * WebRTC VideoSink that renders I420 frames using a BT.709 studio-swing
- * (limited-range) YUV→RGB shader. Replaces SurfaceViewRenderer to work
- * around the Fire OS hardware H.264 decoder applying the wrong colour matrix.
+ * WebRTC VideoSink that renders I420 frames using a BT.601 limited-range
+ * YUV→RGB shader with a 0.97 G-channel gain to correct encoder-specific
+ * colour drift. Replaces SurfaceViewRenderer to bypass the Fire OS hardware
+ * decoder's incorrect colour matrix.
  *
  * The decoder is kept as SoftwareVideoDecoderFactory so frames arrive as
  * I420 buffers — no OES texture path required.
@@ -90,7 +91,7 @@ class ScreenVideoRenderer @JvmOverloads constructor(
             GLES20.glGenTextures(3, texIds, 0)
             // Nearest-neighbour for all planes: screen content has hard pixel edges
             // and any chroma interpolation causes colour fringing around lines/text.
-            for ((i, id) in texIds.withIndex()) {
+            for (id in texIds) {
                 val filter = GLES20.GL_NEAREST
                 GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, id)
                 GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, filter)
@@ -120,25 +121,25 @@ class ScreenVideoRenderer @JvmOverloads constructor(
                     upload(texIds[0], i420.width,     i420.height,     i420.dataY, i420.strideY)
                     upload(texIds[1], i420.width / 2, i420.height / 2, i420.dataU, i420.strideU)
                     upload(texIds[2], i420.width / 2, i420.height / 2, i420.dataV, i420.strideV)
+
+                    GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+                    GLES20.glUseProgram(program)
+
+                    bindTex(0, texIds[0], yLoc)
+                    bindTex(1, texIds[1], uLoc)
+                    bindTex(2, texIds[2], vLoc)
+
+                    GLES20.glEnableVertexAttribArray(posLoc)
+                    GLES20.glVertexAttribPointer(posLoc, 2, GLES20.GL_FLOAT, false, 0, quadPos)
+                    GLES20.glEnableVertexAttribArray(tcLoc)
+                    GLES20.glVertexAttribPointer(tcLoc,  2, GLES20.GL_FLOAT, false, 0, quadTc)
+                    GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
                 } finally {
                     i420.release()
                 }
             } finally {
                 frame.release()
             }
-
-            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
-            GLES20.glUseProgram(program)
-
-            bindTex(0, texIds[0], yLoc)
-            bindTex(1, texIds[1], uLoc)
-            bindTex(2, texIds[2], vLoc)
-
-            GLES20.glEnableVertexAttribArray(posLoc)
-            GLES20.glVertexAttribPointer(posLoc, 2, GLES20.GL_FLOAT, false, 0, quadPos)
-            GLES20.glEnableVertexAttribArray(tcLoc)
-            GLES20.glVertexAttribPointer(tcLoc,  2, GLES20.GL_FLOAT, false, 0, quadTc)
-            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
         }
 
         private fun upload(texId: Int, w: Int, h: Int, data: ByteBuffer, stride: Int) {

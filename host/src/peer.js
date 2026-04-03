@@ -117,7 +117,7 @@ async function startWebRTC(stream) {
         const params = sender.getParameters();
         if (params.encodings.length > 0) {
           params.encodings[0].maxBitrate = 12_000_000;
-          sender.setParameters(params);
+          sender.setParameters(params).catch(err => console.warn('setParameters failed:', err));
         }
       }
     } else if (state === 'disconnected' || state === 'failed') {
@@ -134,7 +134,7 @@ async function startWebRTC(stream) {
   };
 
   const offer = await pc.createOffer();
-  const mungedSdp = stripColorSpaceExtmap(preferH264(offer.sdp));
+  const mungedSdp = preferH264(offer.sdp);
   await pc.setLocalDescription({ type: offer.type, sdp: mungedSdp });
   window.sendSignaling({ type: offer.type, sdp: mungedSdp });
 
