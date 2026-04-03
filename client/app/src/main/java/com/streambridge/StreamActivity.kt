@@ -5,7 +5,6 @@ import android.view.KeyEvent
 import android.view.WindowManager
 import android.widget.TextView
 import androidx.fragment.app.FragmentActivity
-import org.webrtc.SurfaceViewRenderer
 
 class StreamActivity : FragmentActivity() {
 
@@ -14,7 +13,7 @@ class StreamActivity : FragmentActivity() {
         private const val SIGNALING_PORT = 8080
     }
 
-    private lateinit var surfaceView: SurfaceViewRenderer
+    private lateinit var surfaceView: ScreenVideoRenderer
     private lateinit var tvHudStatus: TextView
 
     // Nullable so onDestroy is safe if onCreate exits early (missing EXTRA_HOST_IP)

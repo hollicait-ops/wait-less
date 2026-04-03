@@ -5,8 +5,6 @@ import android.util.Log
 import java.nio.ByteBuffer
 import org.json.JSONObject
 import org.webrtc.DataChannel
-import org.webrtc.DefaultVideoDecoderFactory
-import org.webrtc.EglBase
 import org.webrtc.IceCandidate
 import org.webrtc.MediaConstraints
 import org.webrtc.MediaStream
@@ -15,12 +13,13 @@ import org.webrtc.PeerConnectionFactory
 import org.webrtc.RtpReceiver
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
-import org.webrtc.SurfaceViewRenderer
+import org.webrtc.SoftwareVideoDecoderFactory
+import org.webrtc.VideoSink
 import org.webrtc.VideoTrack
 
 class WebRTCManager(
     private val context: Context,
-    private val renderer: SurfaceViewRenderer,
+    private val renderer: VideoSink,
     private val onStatus: (String) -> Unit,
 ) {
     companion object {
@@ -31,7 +30,6 @@ class WebRTCManager(
     /** Set by StreamActivity after both WebRTCManager and SignalingClient are created. */
     var onSendSignaling: ((JSONObject) -> Unit)? = null
 
-    private var eglBase: EglBase? = null
     private var factory: PeerConnectionFactory? = null
     private var peerConnection: PeerConnection? = null
 
@@ -40,9 +38,6 @@ class WebRTCManager(
         private set
 
     fun start() {
-        val base = EglBase.create()
-        eglBase = base
-
         if (!factoryInitialized) {
             PeerConnectionFactory.initialize(
                 PeerConnectionFactory.InitializationOptions.builder(context)
@@ -53,11 +48,8 @@ class WebRTCManager(
         }
 
         factory = PeerConnectionFactory.builder()
-            .setVideoDecoderFactory(DefaultVideoDecoderFactory(base.eglBaseContext))
+            .setVideoDecoderFactory(SoftwareVideoDecoderFactory())
             .createPeerConnectionFactory()
-
-        renderer.init(base.eglBaseContext, null)
-        renderer.setMirror(false)
     }
 
     fun onRemoteOffer(offer: JSONObject) {
@@ -69,8 +61,12 @@ class WebRTCManager(
         }
 
         val sdpString = offer.optString("sdp")
-        sdpString.lines().filter { it.contains("profile-level-id", ignoreCase = true) || it.startsWith("b=AS:") }
-            .forEach { Log.i(TAG, "SDP offer: $it") }
+        sdpString.lines().filter {
+                it.contains("profile-level-id", ignoreCase = true) ||
+                it.startsWith("b=AS:") ||
+                it.contains("color", ignoreCase = true) ||
+                it.startsWith("a=extmap:")
+            }.forEach { Log.i(TAG, "SDP offer: $it") }
 
         val remoteSdp = SessionDescription(SessionDescription.Type.OFFER, sdpString)
 
@@ -80,9 +76,12 @@ class WebRTCManager(
                 pc.createAnswer(object : SimpleSdpObserver() {
                     override fun onCreateSuccess(answer: SessionDescription) {
                         Log.i(TAG, "createAnswer succeeded — setting local description")
-                        answer.description.lines()
-                            .filter { it.contains("profile-level-id", ignoreCase = true) || it.startsWith("b=AS:") }
-                            .forEach { Log.i(TAG, "SDP answer: $it") }
+                        answer.description.lines().filter {
+                                it.contains("profile-level-id", ignoreCase = true) ||
+                                it.startsWith("b=AS:") ||
+                                it.contains("color", ignoreCase = true) ||
+                                it.startsWith("a=extmap:")
+                            }.forEach { Log.i(TAG, "SDP answer: $it") }
                         pc.setLocalDescription(object : SimpleSdpObserver() {
                             override fun onSetSuccess() {
                                 Log.i(TAG, "setLocalDescription succeeded — sending answer")
@@ -138,9 +137,6 @@ class WebRTCManager(
         peerConnection = null
         factory?.dispose()
         factory = null
-        renderer.release()
-        eglBase?.release()
-        eglBase = null
     }
 
     private fun getOrCreatePeerConnection(): PeerConnection? {
