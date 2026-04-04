@@ -76,7 +76,19 @@ function startStreamer({ clientIp, videoPort = VIDEO_PORT, inputPort = INPUT_POR
     '-profile:v', 'baseline',
     '-level', '4.1',
     '-pix_fmt', 'yuv420p',
-    '-x264-params', 'keyint=30:min-keyint=30:scenecut=0:bframes=0:sliced-threads=0',
+    // Explicit BT.709 metadata so the decoder uses the correct color matrix.
+    // Without these, decoders may guess the wrong primaries and apply the wrong
+    // YUV-to-RGB conversion, causing a chroma shift especially in dark areas.
+    '-colorspace', 'bt709',
+    '-color_primaries', 'bt709',
+    '-color_trc', 'bt709',
+    '-color_range', 'tv',
+    // chroma-qp-offset=-2: reduce chroma quantization aggressiveness by 2 steps.
+    // ultrafast over-quantizes UV in flat dark areas, leaving adjacent DCT blocks
+    // alternating slightly above/below neutral chroma (128), which renders as
+    // alternating magenta/green bands. A small negative offset gives UV channels
+    // more bitrate at minimal overall cost.
+    '-x264-params', 'keyint=30:min-keyint=30:scenecut=0:bframes=0:sliced-threads=0:chroma-qp-offset=-4',
     '-f', 'h264',
     'pipe:1',
   ];
