@@ -8,5 +8,8 @@ contextBridge.exposeInMainWorld('streambridge', {
     ipcRenderer.on('signaling-status', (_e, msg) => cb(msg));
   },
   sendInputEvent: (data) => ipcRenderer.send('input-event', data),
-  getDesktopSources: () => ipcRenderer.invoke('get-desktop-sources'),
+  getStreamPorts: () => ipcRenderer.invoke('get-stream-ports'),
+  startStreamer: () => ipcRenderer.invoke('start-streamer'),
+  stopStreamer: () => ipcRenderer.invoke('stop-streamer'),
+  restart: () => ipcRenderer.invoke('restart'),
 });

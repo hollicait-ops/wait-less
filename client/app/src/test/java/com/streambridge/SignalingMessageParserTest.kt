@@ -7,43 +7,32 @@ import org.junit.Test
 
 class SignalingMessageParserTest {
 
-    // --- Happy paths ---
-
     @Test
-    fun `offer returns Offer with the full JSON`() {
-        val result = parseSignalingMessage("""{"type":"offer","sdp":"v=0 o=test"}""")
-        assertTrue(result is SignalingMessage.Offer)
-        assertEquals("offer", (result as SignalingMessage.Offer).json.getString("type"))
-        assertEquals("v=0 o=test", result.json.getString("sdp"))
+    fun `stream-info returns StreamInfo with video and input ports`() {
+        val result = parseSignalingMessage("""{"type":"stream-info","videoPort":9000,"inputPort":9001}""")
+        assertTrue(result is SignalingMessage.StreamInfo)
+        val info = result as SignalingMessage.StreamInfo
+        assertEquals(9000, info.videoPort)
+        assertEquals(9001, info.inputPort)
     }
 
     @Test
-    fun `answer returns Answer with the full JSON`() {
-        val result = parseSignalingMessage("""{"type":"answer","sdp":"v=0"}""")
-        assertTrue(result is SignalingMessage.Answer)
-        assertEquals("answer", (result as SignalingMessage.Answer).json.getString("type"))
+    fun `stream-info uses defaults when ports are absent`() {
+        val result = parseSignalingMessage("""{"type":"stream-info"}""")
+        assertTrue(result is SignalingMessage.StreamInfo)
+        val info = result as SignalingMessage.StreamInfo
+        assertEquals(9000, info.videoPort)
+        assertEquals(9001, info.inputPort)
     }
-
-    @Test
-    fun `ice-candidate returns IceCandidate with the full JSON`() {
-        val result = parseSignalingMessage(
-            """{"type":"ice-candidate","candidate":{"candidate":"candidate:1 1 UDP 123 192.168.1.1 5000 typ host"}}"""
-        )
-        assertTrue(result is SignalingMessage.IceCandidate)
-        val candidate = (result as SignalingMessage.IceCandidate).json.getJSONObject("candidate")
-        assertTrue(candidate.getString("candidate").startsWith("candidate:"))
-    }
-
-    // --- Null / unknown cases ---
 
     @Test
     fun `unknown type returns null`() {
-        assertNull(parseSignalingMessage("""{"type":"ping"}"""))
+        assertNull(parseSignalingMessage("""{"type":"offer","sdp":"v=0"}"""))
     }
 
     @Test
     fun `missing type field returns null`() {
-        assertNull(parseSignalingMessage("""{"sdp":"v=0"}"""))
+        assertNull(parseSignalingMessage("""{"videoPort":9000}"""))
     }
 
     @Test

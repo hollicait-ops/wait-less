@@ -17,12 +17,13 @@ function createSignalingServer(port, onStatus) {
   });
 
   wss.on('connection', (ws, req) => {
-    const peer = req.socket.remoteAddress;
-    onStatus(`Peer connected: ${peer} (${wss.clients.size} total)`);
+    // Strip IPv4-mapped IPv6 prefix (::ffff:192.168.x.x → 192.168.x.x)
+    const peer = req.socket.remoteAddress.replace(/^::ffff:/, '');
+    onStatus(`Peer connected: ${peer} (${wss.clients.size} total)`, { clientIp: peer });
 
     // Notify existing peers that a new client joined so the renderer can
-    // re-send its offer. The signaling server does not buffer messages, so
-    // a client that connects after the initial offer was sent would never
+    // re-send stream-info. The signaling server does not buffer messages, so
+    // a client that connects after stream-info was sent would never
     // receive it without this notification.
     wss.clients.forEach((client) => {
       if (client !== ws && client.readyState === WebSocket.OPEN) {
@@ -40,6 +41,12 @@ function createSignalingServer(port, onStatus) {
 
     ws.on('close', () => {
       onStatus(`Peer disconnected: ${peer} (${wss.clients.size} remaining)`);
+      // Notify remaining peers so the host can stop the streamer
+      wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({ type: 'peer-left' }));
+        }
+      });
     });
 
     ws.on('error', (err) => {

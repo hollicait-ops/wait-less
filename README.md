@@ -2,7 +2,7 @@
 
 Stream your Windows desktop to an Amazon Fire Stick over local WiFi. No cloud services, no relay servers, no new hardware. Target latency is under 60ms glass-to-glass.
 
-Architecturally similar to Steam Link: an Electron host captures and streams the display over WebRTC, a native Android app on the Fire Stick decodes and renders it, and the Fire Stick D-pad acts as a mouse/keyboard.
+Architecturally similar to Steam Link: an Electron host captures the display and streams it via FFmpeg + raw UDP, a native Android app on the Fire Stick decodes and renders it, and the Fire Stick D-pad acts as a mouse/keyboard.
 
 ---
 
@@ -13,6 +13,14 @@ Architecturally similar to Steam Link: an Electron host captures and streams the
 - Windows 10 or 11
 - [Node.js 20+](https://nodejs.org/en/download)
 - Electron 28+ (installed automatically via `npm install`)
+- **FFmpeg** on your PATH — used for screen capture and H.264 encoding
+
+  ```powershell
+  winget install Gyan.FFmpeg
+  ```
+
+  Restart your terminal afterwards and verify with `ffmpeg -version`.
+
 - `adb` (Android Debug Bridge) on your PATH — used to deploy the app to the Fire Stick over WiFi
 
   The easiest way to get `adb` is via [Android Studio](https://developer.android.com/studio), which installs it at `%LOCALAPPDATA%\Android\Sdk\platform-tools\`. If you don't want the full IDE, download the [standalone platform-tools zip](https://developer.android.com/tools/releases/platform-tools), extract it (e.g. `C:\platform-tools\`), and add that folder to your PATH:
@@ -92,7 +100,7 @@ The APK is also at `client/app/build/outputs/apk/debug/app-debug.apk` if you pre
 
 1. On the host PC: click **Start Streaming** in the host app
 2. On the Fire Stick: open StreamBridge, enter the host's IP, press **Connect**
-3. The stream starts automatically once the WebRTC handshake completes
+3. The stream starts automatically once the Fire Stick connects to the signaling server
 
 ### Fire Stick controls
 
@@ -110,27 +118,26 @@ The APK is also at `client/app/build/outputs/apk/debug/app-debug.apk` if you pre
 ```
 streambridge/
 ├── host/                        # Electron app — runs on the Windows PC
-│   ├── main.js                  # Main process: signaling server, input relay
+│   ├── main.js                  # Main process: signaling server, streamer IPC, input relay
 │   ├── src/
 │   │   ├── signaling.js         # WebSocket signaling server
-│   │   ├── capture.js           # Screen/audio capture via desktopCapturer
-│   │   ├── peer.js              # WebRTC peer connection + DataChannel
+│   │   ├── streamer.js          # FFmpeg capture + H.264 UDP sender + input receiver
 │   │   └── input.js             # Input event validation and robotjs replay
 │   ├── renderer/
 │   │   ├── index.html           # Host UI: IP display, start button, status log
-│   │   ├── renderer.js          # Renderer process: signaling + WebRTC wiring
+│   │   ├── renderer.js          # Renderer process: signaling wiring
 │   │   └── preload.js           # Context bridge: exposes IPC to renderer
 │   └── test/
 │       ├── signaling.test.js    # Integration tests for the signaling relay
-│       ├── peer.test.js         # Unit tests for H.264 SDP munging
 │       └── input.test.js        # Unit tests for input validation and replay
 └── client/                      # Android app — runs on the Fire Stick
     └── app/src/main/java/com/streambridge/
         ├── MainActivity.kt      # IP entry screen
         ├── StreamActivity.kt    # Fullscreen video render
         ├── SignalingClient.kt   # WebSocket signaling (OkHttp)
-        ├── WebRTCManager.kt     # Peer connection + H.264 hardware decode
-        └── InputHandler.kt      # D-pad → mouse/keyboard events via DataChannel
+        ├── UdpVideoReceiver.kt  # UDP reassembly + MediaCodec H.264 decode
+        ├── ScreenVideoRenderer.kt # EGL14 + OES shader render
+        └── InputHandler.kt      # D-pad → mouse/keyboard events via UDP
 ```
 
 ---
@@ -154,17 +161,6 @@ cd client
 ./gradlew installDebug           # Build and push to connected ADB device
 ```
 
-### Testing the stream without a Fire Stick
-
-Start the host, then open a Chrome tab and navigate to the test receiver page:
-
-```bash
-cd host
-npm run test-receiver            # Serves test-receiver/ on port 3000
-```
-
-This lets you verify the WebRTC stream is working before touching Android.
-
 ### Measuring latency
 
 Display a running stopwatch on the host PC, film both the host screen and the Fire Stick simultaneously with a phone camera, then count the frame offset. Each frame at 60fps is ~16.7ms.
@@ -178,6 +174,7 @@ Display a running stopwatch on the host PC, film both the host screen and the Fi
 | Tool | Version | Download |
 |------|---------|----------|
 | Node.js | 20+ | [nodejs.org](https://nodejs.org/en/download) |
+| FFmpeg | 6+ | `winget install Gyan.FFmpeg` |
 | JDK | 17+ | [Microsoft OpenJDK](https://learn.microsoft.com/en-us/java/openjdk/download) or [Adoptium](https://adoptium.net) |
 | Android SDK | API 34 | [Android Studio](https://developer.android.com/studio) (easiest) or [command-line tools](https://developer.android.com/studio#command-line-tools-only) |
 | ADB | any | Bundled with Android Studio / SDK platform-tools |

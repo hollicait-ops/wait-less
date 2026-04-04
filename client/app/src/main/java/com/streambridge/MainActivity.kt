@@ -27,9 +27,13 @@ class MainActivity : FragmentActivity() {
         btnConnect = findViewById(R.id.btn_connect)
         tvStatus = findViewById(R.id.tv_status)
 
+        val prefs = getPreferences(MODE_PRIVATE)
+        etHostIp.setText(prefs.getString("last_ip", ""))
+
         btnConnect.setOnClickListener {
             val ip = etHostIp.text.toString().trim()
             if (ip.isNotEmpty()) {
+                prefs.edit().putString("last_ip", ip).apply()
                 val intent = Intent(this, StreamActivity::class.java)
                 intent.putExtra(StreamActivity.EXTRA_HOST_IP, ip)
                 startActivity(intent)

@@ -6,8 +6,6 @@ const path = require('node:path');
 const HOST_DIR = path.join(__dirname, '..');
 const RENDERER_SCRIPTS = [
   path.join(HOST_DIR, 'renderer', 'renderer.js'),
-  path.join(HOST_DIR, 'src', 'capture.js'),
-  path.join(HOST_DIR, 'src', 'peer.js'),
 ];
 
 // Names that npm places on PATH and that cmd.exe would resolve before

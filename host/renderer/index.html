@@ -45,6 +45,13 @@
     }
     button:disabled { opacity: 0.4; cursor: default; }
     button:not(:disabled):hover { opacity: 0.85; }
+    #restart-btn {
+      background: transparent;
+      color: #888;
+      border: 1px solid #444;
+      padding: 6px 18px;
+      font-size: 0.8rem;
+    }
     #status-log {
       width: 100%;
       flex: 1;
@@ -76,6 +83,7 @@
   <div id="stream-status">Waiting for connection...</div>
 
   <button id="start-btn">Start Streaming</button>
+  <button id="restart-btn">Restart</button>
 
   <div id="status-log"></div>
 
