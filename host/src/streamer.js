@@ -60,12 +60,15 @@ function startStreamer({ clientIp, videoPort = VIDEO_PORT, inputPort = INPUT_POR
   inputSocket.bind(inputPort, () => onLog(`[udp-input] listening on port ${inputPort}`));
 
   // FFmpeg command: gdigrab → H.264 baseline → Annex B on stdout
-  // -tune zerolatency: disables lookahead, rc-lookahead, and sliced threads,
-  //   so each frame is flushed to output immediately.
-  // keyint=60:min-keyint=60:scenecut=0: IDR every 60 frames (1 s at 60 fps),
-  //   no scene-cut detection so frag_count is predictable.
-  // bframes=0: no B-frames — baseline profile enforces this but explicit.
+  // -tune zerolatency enables sliced-threads (intra-frame parallelism with
+  //   zero inter-frame delay), rc-lookahead=0, sync-lookahead=0, and no mbtree.
+  //   Do NOT override sliced-threads=0 — that falls back to frame-level threading
+  //   which adds ~threads*16ms of pipeline latency.
+  // -fflags nobuffer: skip input buffering on the demuxer side.
+  // -flush_packets 1: flush each muxer packet to stdout immediately.
   const ffmpegArgs = [
+    '-fflags', 'nobuffer',
+    '-thread_queue_size', '2',
     '-f', 'gdigrab',
     '-framerate', '60',
     '-i', 'desktop',
@@ -76,9 +79,6 @@ function startStreamer({ clientIp, videoPort = VIDEO_PORT, inputPort = INPUT_POR
     '-profile:v', 'baseline',
     '-level', '4.1',
     '-pix_fmt', 'yuv420p',
-    // Explicit BT.709 metadata so the decoder uses the correct color matrix.
-    // Without these, decoders may guess the wrong primaries and apply the wrong
-    // YUV-to-RGB conversion, causing a chroma shift especially in dark areas.
     '-colorspace', 'bt709',
     '-color_primaries', 'bt709',
     '-color_trc', 'bt709',
@@ -91,7 +91,8 @@ function startStreamer({ clientIp, videoPort = VIDEO_PORT, inputPort = INPUT_POR
     // aud=1: emit an Access Unit Delimiter NAL (type 9) before each frame so the
     // NAL parser can flush immediately on the AUD rather than waiting for the next
     // frame's first slice to arrive and be parsed (~one encode cycle earlier).
-    '-x264-params', 'keyint=30:min-keyint=30:scenecut=0:bframes=0:sliced-threads=0:chroma-qp-offset=-4:aud=1',
+    '-x264-params', 'keyint=30:min-keyint=30:scenecut=0:bframes=0:slices=4:chroma-qp-offset=-4:aud=1',
+    '-flush_packets', '1',
     '-f', 'h264',
     'pipe:1',
   ];
