@@ -235,7 +235,7 @@ function sendFrame(frameData, ip, port) {
     packet.writeUInt16BE(fragCount, 6);
     frameData.copy(packet, HEADER_SIZE, payloadStart, payloadEnd);
 
-    videoSocket.send(packet, port, ip);
+    if (videoSocket) videoSocket.send(packet, port, ip);
   }
 }
 
