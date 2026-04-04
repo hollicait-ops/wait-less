@@ -13,7 +13,8 @@ import org.webrtc.PeerConnectionFactory
 import org.webrtc.RtpReceiver
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
-import org.webrtc.SoftwareVideoDecoderFactory
+import org.webrtc.DefaultVideoDecoderFactory
+import org.webrtc.EglBase
 import org.webrtc.VideoSink
 import org.webrtc.VideoTrack
 
@@ -30,6 +31,7 @@ class WebRTCManager(
     /** Set by StreamActivity after both WebRTCManager and SignalingClient are created. */
     var onSendSignaling: ((JSONObject) -> Unit)? = null
 
+    private var eglBase: EglBase? = null
     private var factory: PeerConnectionFactory? = null
     private var peerConnection: PeerConnection? = null
 
@@ -38,6 +40,9 @@ class WebRTCManager(
         private set
 
     fun start() {
+        val base = EglBase.create()
+        eglBase = base
+
         if (!factoryInitialized) {
             PeerConnectionFactory.initialize(
                 PeerConnectionFactory.InitializationOptions.builder(context)
@@ -47,8 +52,11 @@ class WebRTCManager(
             factoryInitialized = true
         }
 
+        // Hardware decode: DefaultVideoDecoderFactory uses the GPU decoder on Fire Stick.
+        // Frames arrive as TextureBuffers; onDrawFrame calls toI420() which internally
+        // handles the decoder EGL context, so no context sharing with GLSurfaceView needed.
         factory = PeerConnectionFactory.builder()
-            .setVideoDecoderFactory(SoftwareVideoDecoderFactory())
+            .setVideoDecoderFactory(DefaultVideoDecoderFactory(base.getEglBaseContext()))
             .createPeerConnectionFactory()
     }
 
@@ -137,6 +145,8 @@ class WebRTCManager(
         peerConnection = null
         factory?.dispose()
         factory = null
+        eglBase?.release()
+        eglBase = null
     }
 
     private fun getOrCreatePeerConnection(): PeerConnection? {
