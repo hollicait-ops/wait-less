@@ -53,7 +53,12 @@ class UdpVideoReceiver(
     fun start() {
         running = true
 
-        videoSocket = DatagramSocket(videoPort)
+        videoSocket = DatagramSocket(videoPort).also {
+            // Default Android receive buffer (~256KB) can overflow during IDR bursts
+            // (~150KB in one GOP) or brief WiFi retransmit delays, causing kernel-level
+            // packet drops before the app ever sees them. 2MB gives comfortable headroom.
+            it.receiveBufferSize = 2 * 1024 * 1024
+        }
         inputSocket = DatagramSocket()
 
         codec = createAndStartCodec(outputSurface)

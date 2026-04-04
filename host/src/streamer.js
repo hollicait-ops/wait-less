@@ -76,7 +76,7 @@ function startStreamer({ clientIp, videoPort = VIDEO_PORT, inputPort = INPUT_POR
     '-profile:v', 'baseline',
     '-level', '4.1',
     '-pix_fmt', 'yuv420p',
-    '-x264-params', 'keyint=60:min-keyint=60:scenecut=0:bframes=0:sliced-threads=0',
+    '-x264-params', 'keyint=30:min-keyint=30:scenecut=0:bframes=0:sliced-threads=0',
     '-f', 'h264',
     'pipe:1',
   ];
@@ -236,6 +236,9 @@ function sendFrame(frameData, ip, port) {
     frameData.copy(packet, HEADER_SIZE, payloadStart, payloadEnd);
 
     if (videoSocket) videoSocket.send(packet, port, ip);
+    // Send fragment 0 twice: losing it makes the entire frame unrecoverable
+    // since the reassembler needs all fragments. Duplicate cost is ~1% bandwidth.
+    if (i === 0 && videoSocket) videoSocket.send(packet, port, ip);
   }
 }
 
