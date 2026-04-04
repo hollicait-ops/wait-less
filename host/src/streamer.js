@@ -76,7 +76,7 @@ function startStreamer({ clientIp, videoPort = VIDEO_PORT, inputPort = INPUT_POR
     '-profile:v', 'baseline',
     '-level', '4.1',
     '-pix_fmt', 'yuv420p',
-    '-x264-params', 'keyint=60:min-keyint=60:scenecut=0:bframes=0',
+    '-x264-params', 'keyint=60:min-keyint=60:scenecut=0:bframes=0:sliced-threads=0',
     '-f', 'h264',
     'pipe:1',
   ];
@@ -151,6 +151,14 @@ function createNalParser(onFrame) {
     return nalBody.length > 0 ? (nalBody[0] & 0x1f) : 0;
   }
 
+  // Check if a VCL NAL is the first slice of a new access unit.
+  // first_mb_in_slice is the first exp-golomb value in the slice header;
+  // when it's 0 the exp-golomb encoding is a single '1' bit, so the MSB
+  // of the first RBSP byte (nalBody[1]) is set.
+  function isFirstSliceInFrame(nalBody) {
+    return nalBody.length >= 2 && (nalBody[1] & 0x80) !== 0;
+  }
+
   function flushFrame() {
     if (frameNals.length === 0) return;
     // Rebuild as Annex B: 00 00 00 01 + nal body for each NAL
@@ -180,9 +188,18 @@ function createNalParser(onFrame) {
         const nalBody = buf.slice(nalBodyStart, next.pos);
         const type = nalUnitType(nalBody);
 
-        // A new slice NAL starts a new access unit — flush the previous frame
-        if ((type === NAL_NON_IDR_SLICE || type === NAL_IDR_SLICE) && frameHasSlice) {
+        // A new access unit starts when we see a VCL NAL with first_mb_in_slice == 0
+        // (i.e. the first slice of a new frame). Continuation slices (first_mb != 0)
+        // belong to the current frame and must NOT trigger a flush.
+        if ((type === NAL_NON_IDR_SLICE || type === NAL_IDR_SLICE) && frameHasSlice && isFirstSliceInFrame(nalBody)) {
+          const carryOver = [];
+          while (frameNals.length > 0) {
+            const lastType = nalUnitType(frameNals[frameNals.length - 1]);
+            if (lastType === NAL_NON_IDR_SLICE || lastType === NAL_IDR_SLICE) break;
+            carryOver.unshift(frameNals.pop());
+          }
           flushFrame();
+          frameNals.push(...carryOver);
         }
 
         frameNals.push(nalBody);

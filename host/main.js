@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const os = require('os');
 const path = require('path');
+const { spawn } = require('child_process');
+const fs = require('fs');
 const { createSignalingServer } = require('./src/signaling');
 const { replayInputEvent } = require('./src/input');
 const { startStreamer, stopStreamer, VIDEO_PORT, INPUT_PORT } = require('./src/streamer');
@@ -85,8 +87,30 @@ ipcMain.handle('start-streamer', () => {
       if (mainWindow) mainWindow.webContents.send('signaling-status', msg);
     },
   });
+  takeFireStickScreenshot(8000);
   return { ok: true, videoPort: VIDEO_PORT, inputPort: INPUT_PORT };
 });
+
+function takeFireStickScreenshot(delayMs = 3000) {
+  setTimeout(() => {
+    const dest = 'C:\\temp\\firestick_screen.png';
+    const adb = spawn('adb', ['exec-out', 'screencap', '-p']);
+    const chunks = [];
+    adb.stdout.on('data', (chunk) => chunks.push(chunk));
+    adb.stderr.on('data', (d) => console.warn('[screenshot] adb stderr:', d.toString().trim()));
+    adb.on('close', (code) => {
+      if (code === 0 && chunks.length > 0) {
+        fs.writeFile(dest, Buffer.concat(chunks), (err) => {
+          if (err) console.error('[screenshot] write failed:', err.message);
+          else console.log('[screenshot] saved:', dest);
+        });
+      } else {
+        console.warn('[screenshot] adb exited with code', code);
+      }
+    });
+    adb.on('error', (err) => console.warn('[screenshot] adb error:', err.message));
+  }, delayMs);
+}
 
 ipcMain.handle('stop-streamer', () => {
   stopStreamer();
@@ -96,6 +120,7 @@ ipcMain.handle('stop-streamer', () => {
 ipcMain.handle('get-local-ip', () => getLocalIP());
 ipcMain.handle('get-signaling-port', () => SIGNALING_PORT);
 ipcMain.handle('get-stream-ports', () => ({ videoPort: VIDEO_PORT, inputPort: INPUT_PORT }));
+ipcMain.handle('restart', () => { app.relaunch(); app.exit(0); });
 
 app.whenReady().then(() => {
   loadRobotjs();

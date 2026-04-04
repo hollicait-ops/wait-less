@@ -59,8 +59,6 @@ class SignalingClient(
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.i(TAG, "Connected to $url")
                 listener.onConnected()
-                // Tell the host we are ready — triggers stream-info reply
-                webSocket.send("""{"type":"client-ready"}""")
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -81,6 +79,10 @@ class SignalingClient(
                 listener.onDisconnected(reason.ifEmpty { "Connection closed" })
             }
         })
+    }
+
+    fun send(text: String) {
+        ws?.send(text)
     }
 
     fun disconnect() {

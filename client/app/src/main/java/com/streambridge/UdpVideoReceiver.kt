@@ -43,6 +43,7 @@ class UdpVideoReceiver(
 
     private var receiveThread: Thread? = null
     private var codecThread: Thread? = null
+    private var drainThread: Thread? = null
     private var codec: MediaCodec? = null
     private var videoSocket: DatagramSocket? = null
     private var inputSocket: DatagramSocket? = null
@@ -58,7 +59,8 @@ class UdpVideoReceiver(
         codec = createAndStartCodec(outputSurface)
 
         receiveThread = Thread(::receiveLoop, "udp-receive").also { it.isDaemon = true; it.start() }
-        codecThread = Thread(::codecFeedLoop, "codec-feed").also { it.isDaemon = true; it.start() }
+        codecThread  = Thread(::codecFeedLoop, "codec-feed").also { it.isDaemon = true; it.start() }
+        drainThread  = Thread(::drainLoop, "codec-drain").also { it.isDaemon = true; it.start() }
 
         onStatus("Receiving stream on UDP port $videoPort")
     }
@@ -67,6 +69,7 @@ class UdpVideoReceiver(
         running = false
         receiveThread?.interrupt()
         codecThread?.interrupt()
+        drainThread?.interrupt()
         videoSocket?.close()
         inputSocket?.close()
         try {
@@ -102,12 +105,22 @@ class UdpVideoReceiver(
         // pending[frameId] = array of nullable fragment byte arrays
         val pending = LinkedHashMap<Long, Array<ByteArray?>>()
 
+        // Don't feed the codec until we've seen a complete IDR keyframe.
+        // The IDR is large (many fragments) and slow to assemble; P-frames
+        // complete first and would corrupt the codec state if fed without prior CSD.
+        var waitingForKeyframe = true
+
+        var firstPacket = true
         while (running) {
             try {
                 videoSocket!!.receive(packet)
             } catch (e: Exception) {
                 if (running) Log.w(TAG, "receive error: ${e.message}")
                 break
+            }
+            if (firstPacket) {
+                Log.i(TAG, "First UDP packet received (${packet.length} bytes)")
+                firstPacket = false
             }
 
             val data = packet.data
@@ -140,6 +153,16 @@ class UdpVideoReceiver(
                     frag!!.copyInto(frame, pos)
                     pos += frag.size
                 }
+
+                if (waitingForKeyframe) {
+                    if (!containsIdr(frame)) {
+                        // P-frame arrived before the IDR is fully assembled — drop it
+                        continue
+                    }
+                    waitingForKeyframe = false
+                    Log.i(TAG, "First IDR keyframe assembled (frame $frameId, ${frame.size} bytes)")
+                }
+
                 // Drop oldest rather than block if the codec is behind
                 if (!frameQueue.offer(frame)) {
                     frameQueue.poll()
@@ -155,53 +178,164 @@ class UdpVideoReceiver(
         }
     }
 
+    /** Returns true if the Annex B buffer contains a NAL unit of type 5 (IDR slice). */
+    private fun containsIdr(data: ByteArray): Boolean {
+        var i = 0
+        while (i < data.size - 4) {
+            if (data[i] == 0.toByte() && data[i + 1] == 0.toByte() &&
+                data[i + 2] == 0.toByte() && data[i + 3] == 1.toByte()
+            ) {
+                val bodyIdx = i + 4
+                if (bodyIdx < data.size && (data[bodyIdx].toInt() and 0x1f) == 5) return true
+                i = bodyIdx + 1
+            } else {
+                i++
+            }
+        }
+        return false
+    }
+
     // ---------------------------------------------------------------------------
     // MediaCodec feed loop — pulls complete frames and queues to decoder
     // ---------------------------------------------------------------------------
 
     private fun codecFeedLoop() {
         val mc = codec ?: return
+        var frameCount = 0
         while (running) {
             val frame = try {
                 frameQueue.take()
             } catch (e: InterruptedException) {
                 break
             }
-
-            val inputIdx = try {
-                mc.dequeueInputBuffer(10_000L) // 10 ms timeout
-            } catch (e: Exception) {
-                Log.w(TAG, "dequeueInputBuffer error: ${e.message}")
-                break
+            frameCount++
+            if (frameCount <= 3) {
+                Log.i(TAG, "Frame #$frameCount: ${frame.size} bytes NALs=[${describeAnnexBNalTypes(frame)}]")
             }
-
-            if (inputIdx < 0) continue // timeout — try again
-
-            val inputBuf = mc.getInputBuffer(inputIdx) ?: continue
-            val written = minOf(frame.size, inputBuf.capacity())
-            inputBuf.clear()
-            inputBuf.put(frame, 0, written)
-            mc.queueInputBuffer(inputIdx, 0, written, System.nanoTime() / 1000L, 0)
-
-            // Drain output buffers — with Surface output, releaseOutputBuffer(render=true)
-            // pushes the decoded frame to the SurfaceTexture automatically.
-            drainOutput(mc)
+            if (!feedAnnexBFrame(mc, frame)) break
         }
     }
 
-    private fun drainOutput(mc: MediaCodec) {
+    /**
+     * Feeds an Annex B frame to MediaCodec, splitting SPS (type 7) and PPS (type 8)
+     * out as BUFFER_FLAG_CODEC_CONFIG buffers so hardware decoders that require
+     * explicit CSD initialisation are satisfied. All remaining NAL units (slices,
+     * SEI, etc.) are concatenated and submitted as a single regular input buffer.
+     */
+    private fun feedAnnexBFrame(mc: MediaCodec, data: ByteArray): Boolean {
+        val nals = splitAnnexB(data)
+
+        // Send SPS/PPS as codec-config buffers
+        for ((nalType, nalData) in nals) {
+            if (nalType == 7 || nalType == 8) {
+                if (!feedBuffer(mc, nalData, MediaCodec.BUFFER_FLAG_CODEC_CONFIG)) return false
+            }
+        }
+
+        // Send remaining NALs (slices, SEI, AUD…) as a single regular buffer
+        val sliceNals = nals.filter { (t, _) -> t != 7 && t != 8 }
+        if (sliceNals.isNotEmpty()) {
+            val combined = ByteArray(sliceNals.sumOf { it.second.size })
+            var pos = 0
+            for ((_, nalData) in sliceNals) {
+                nalData.copyInto(combined, pos)
+                pos += nalData.size
+            }
+            if (!feedBuffer(mc, combined, 0)) return false
+        }
+        return true
+    }
+
+    /** Splits an Annex B buffer into (nalType, rawBytesWithStartCode) pairs. */
+    private fun splitAnnexB(data: ByteArray): List<Pair<Int, ByteArray>> {
+        val result = mutableListOf<Pair<Int, ByteArray>>()
+        var nalStart = -1
+        var nalBodyOffset = -1
+        var i = 0
+        while (i < data.size) {
+            val rem = data.size - i
+            val sc4 = rem >= 4 && data[i] == 0.toByte() && data[i+1] == 0.toByte() &&
+                       data[i+2] == 0.toByte() && data[i+3] == 1.toByte()
+            val sc3 = !sc4 && rem >= 3 && data[i] == 0.toByte() && data[i+1] == 0.toByte() &&
+                       data[i+2] == 1.toByte()
+            if (sc4 || sc3) {
+                if (nalBodyOffset >= 0) {
+                    val nalData = data.copyOfRange(nalStart, i)
+                    val nalType = data[nalBodyOffset].toInt() and 0x1f
+                    result.add(Pair(nalType, nalData))
+                }
+                nalStart = i
+                nalBodyOffset = i + (if (sc4) 4 else 3)
+                i = nalBodyOffset + 1
+            } else {
+                i++
+            }
+        }
+        if (nalBodyOffset >= 0) {
+            val nalData = data.copyOfRange(nalStart, data.size)
+            val nalType = data[nalBodyOffset].toInt() and 0x1f
+            result.add(Pair(nalType, nalData))
+        }
+        return result
+    }
+
+    private fun describeAnnexBNalTypes(data: ByteArray): String {
+        return splitAnnexB(data).joinToString(",") { (t, _) -> t.toString() }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Dedicated output drain loop — runs on its own thread so it can block on
+    // dequeueOutputBuffer without starving the input feed thread.
+    // ---------------------------------------------------------------------------
+
+    private fun drainLoop() {
+        val mc = codec ?: return
         val info = MediaCodec.BufferInfo()
-        while (true) {
-            val outputIdx = mc.dequeueOutputBuffer(info, 0L)
+        while (running) {
+            val outputIdx = try {
+                mc.dequeueOutputBuffer(info, 10_000L) // block up to 10 ms per frame
+            } catch (e: android.media.MediaCodec.CodecException) {
+                if (running) Log.w(TAG, "drain CodecException: code=${e.errorCode} diag=${e.diagnosticInfo} recoverable=${e.isRecoverable}")
+                break
+            } catch (e: Exception) {
+                if (running) Log.w(TAG, "drain error: ${e::class.java.simpleName} — ${e.message}", e)
+                break
+            }
             when {
-                outputIdx >= 0 -> mc.releaseOutputBuffer(outputIdx, true) // render to Surface
+                outputIdx >= 0 -> {
+                    mc.releaseOutputBuffer(outputIdx, true) // render to Surface
+                    framesRendered++
+                    if (framesRendered <= 5 || framesRendered % 60 == 0) {
+                        Log.i(TAG, "Released frame #$framesRendered to Surface (pts=${info.presentationTimeUs})")
+                    }
+                }
                 outputIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                     Log.i(TAG, "Output format changed: ${mc.outputFormat}")
                 }
-                else -> break // INFO_TRY_AGAIN_LATER or INFO_OUTPUT_BUFFERS_CHANGED
+                // INFO_TRY_AGAIN_LATER: loop and wait for the next frame
             }
         }
     }
+
+    /** Queues [data] to the codec with the given [flags]. Returns false on fatal error. */
+    private fun feedBuffer(mc: MediaCodec, data: ByteArray, flags: Int): Boolean {
+        val inputIdx = try {
+            mc.dequeueInputBuffer(10_000L) // 10 ms timeout
+        } catch (e: Exception) {
+            Log.w(TAG, "dequeueInputBuffer error: ${e.message}")
+            return false
+        }
+        if (inputIdx < 0) return true // timeout — skip this data
+
+        val inputBuf = mc.getInputBuffer(inputIdx) ?: return true
+        val written = minOf(data.size, inputBuf.capacity())
+        inputBuf.clear()
+        inputBuf.put(data, 0, written)
+        mc.queueInputBuffer(inputIdx, 0, written, System.nanoTime() / 1000L, flags)
+        return true
+    }
+
+    private var framesRendered = 0
 
     // ---------------------------------------------------------------------------
     // MediaCodec setup
@@ -211,7 +345,7 @@ class UdpVideoReceiver(
         val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 1920, 1080).also {
             // CSD (codec-specific data / SPS+PPS) is embedded inline in the Annex B
             // stream by FFmpeg, so we don't provide KEY_CSD_0/KEY_CSD_1 here.
-            it.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 0)
+            it.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 512 * 1024)
         }
         val mc = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
         mc.configure(format, surface, null, 0)

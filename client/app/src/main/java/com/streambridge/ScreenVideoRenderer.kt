@@ -61,6 +61,7 @@ class ScreenVideoRenderer @JvmOverloads constructor(
 
     private var oesTexId = 0
     private var surfaceTexture: SurfaceTexture? = null
+    private var stAttached = false
 
     // Latch used by awaitInputSurface() to hand the Surface to MediaCodec
     private val inputSurfaceLatch = CountDownLatch(1)
@@ -86,7 +87,6 @@ class ScreenVideoRenderer @JvmOverloads constructor(
         }
     """.trimIndent()
 
-    // RGB-space colour correction for hardware-decoded OES textures.
     private val oesFragSrc = """
         #extension GL_OES_EGL_image_external : require
         precision highp float;
@@ -96,10 +96,9 @@ class ScreenVideoRenderer @JvmOverloads constructor(
         varying vec2 v_tc;
         void main() {
             vec4 c = texture2D(u_tex, v_tc);
-            float r = clamp(c.r - u_lift, 0.0, 1.0);
-            float g = clamp(c.g * u_ggain - u_lift, 0.0, 1.0);
-            float b = clamp(c.b - u_lift, 0.0, 1.0);
-            gl_FragColor = vec4(r, g, b, 1.0);
+            c.rgb = max(c.rgb + u_lift, 0.0);
+            c.g *= u_ggain;
+            gl_FragColor = c;
         }
     """.trimIndent()
 
@@ -109,6 +108,21 @@ class ScreenVideoRenderer @JvmOverloads constructor(
      * Initialise the renderer. Must be called before the view is attached to a window.
      */
     fun init() {
+        // Create the SurfaceTexture in detached mode — no EGL context needed.
+        // This lets MediaCodec output to its Surface without driver conflicts
+        // on devices (e.g. Fire Stick) where the codec can't write to a
+        // Surface created inside an active EGL context.
+        surfaceTexture = SurfaceTexture(false).also { st ->
+            st.setDefaultBufferSize(1920, 1080)
+            st.setOnFrameAvailableListener {
+                if (drawPending.compareAndSet(false, true)) {
+                    glHandler?.post(::drawFrame)
+                }
+            }
+        }
+        inputSurface = Surface(surfaceTexture)
+        inputSurfaceLatch.countDown()
+
         holder.addCallback(this)
         glThread = HandlerThread("ScreenVideoRenderer").also { it.start() }
         glHandler = Handler(glThread!!.looper).also { handler ->
@@ -120,8 +134,27 @@ class ScreenVideoRenderer @JvmOverloads constructor(
     }
 
     /**
-     * Blocks until the EGL context and OES SurfaceTexture are ready, then returns
-     * the [Surface] that MediaCodec should decode into. Safe to call from any thread.
+     * Direct-surface mode: register the surface lifecycle callback and expose the
+     * SurfaceView's own display surface via [awaitInputSurface]. MediaCodec decodes
+     * directly to the SurfaceView — no GL pipeline. Safe to call instead of [init].
+     */
+    fun initDirect() {
+        holder.addCallback(object : SurfaceHolder.Callback {
+            override fun surfaceCreated(h: SurfaceHolder) {
+                inputSurface = h.surface
+                inputSurfaceLatch.countDown()
+                Log.i(TAG, "surfaceCreated — surface ready for MediaCodec")
+            }
+            override fun surfaceChanged(h: SurfaceHolder, format: Int, w: Int, height: Int) {}
+            override fun surfaceDestroyed(h: SurfaceHolder) {
+                inputSurface = null
+            }
+        })
+    }
+
+    /**
+     * Blocks until the input surface is ready, then returns it.
+     * Works for both GL mode ([init]) and direct mode ([initDirect]).
      */
     fun awaitInputSurface(): Surface {
         inputSurfaceLatch.await()
@@ -140,6 +173,10 @@ class ScreenVideoRenderer @JvmOverloads constructor(
         thread.quitSafely()
         glThread = null
         glHandler = null
+        surfaceTexture?.release()
+        surfaceTexture = null
+        inputSurface?.release()
+        inputSurface = null
     }
 
     // ---- SurfaceHolder.Callback ----
@@ -210,10 +247,10 @@ class ScreenVideoRenderer @JvmOverloads constructor(
 
     private fun releaseEgl() {
         glInitialized = false
-        surfaceTexture?.release()
-        surfaceTexture = null
-        inputSurface?.release()
-        inputSurface = null
+        if (stAttached) {
+            surfaceTexture?.detachFromGLContext()
+            stAttached = false
+        }
         if (eglDisplay != EGL14.EGL_NO_DISPLAY) {
             EGL14.eglMakeCurrent(eglDisplay, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
             if (eglSurface != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(eglDisplay, eglSurface)
@@ -248,19 +285,13 @@ class ScreenVideoRenderer @JvmOverloads constructor(
         GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
         GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
 
-        surfaceTexture = SurfaceTexture(oesTexId).also { st ->
-            st.setOnFrameAvailableListener {
-                if (drawPending.compareAndSet(false, true)) {
-                    glHandler?.post(::drawFrame)
-                }
-            }
-        }
-        inputSurface = Surface(surfaceTexture)
-        inputSurfaceLatch.countDown()
+        // Attach the detached SurfaceTexture to the OES texture now that GL is ready
+        surfaceTexture!!.attachToGLContext(oesTexId)
+        stAttached = true
 
         GLES20.glClearColor(0f, 0f, 0f, 1f)
         glInitialized = true
-        Log.i(TAG, "GL initialised — OES SurfaceTexture ready for MediaCodec")
+        Log.i(TAG, "GL initialised — SurfaceTexture attached to OES texture $oesTexId")
     }
 
     // ---- Drawing (glThread only) ----

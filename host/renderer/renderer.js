@@ -7,6 +7,7 @@ let signalingWs = null;
 const ipDisplay = document.getElementById('ip-display');
 const portDisplay = document.getElementById('port-display');
 const startBtn = document.getElementById('start-btn');
+const restartBtn = document.getElementById('restart-btn');
 const streamStatus = document.getElementById('stream-status');
 const statusLog = document.getElementById('status-log');
 
@@ -62,28 +63,33 @@ function connectSignaling(port) {
 }
 
 async function handleSignalingMessage(msg) {
+  if (msg.type === 'peer-left') {
+    logStatus('Client disconnected — stopping streamer');
+    streamStatus.textContent = 'Waiting for client...';
+    await streambridge.stopStreamer();
+    return;
+  }
+
   if (msg.type === 'peer-joined') {
-    logStatus('Client joined — starting streamer and sending stream-info...');
-    await startStreamingToClient();
+    // Send stream-info so the client can bind its UDP socket,
+    // but don't start FFmpeg yet — wait for client-ready.
+    const ports = await streambridge.getStreamPorts();
+    sendSignaling({ type: 'stream-info', videoPort: ports.videoPort, inputPort: ports.inputPort });
+    logStatus('Client joined — sent stream-info, waiting for client-ready...');
+    streamStatus.textContent = 'Waiting for client receiver...';
     return;
   }
 
   if (msg.type === 'client-ready') {
-    logStatus('Client ready — stream active');
+    logStatus('Client ready — starting streamer...');
+    const result = await streambridge.startStreamer();
+    if (!result.ok) {
+      logStatus(`Failed to start streamer: ${result.error}`);
+      return;
+    }
     streamStatus.textContent = 'Streaming';
+    logStatus(`Streaming via UDP — video:${result.videoPort} input:${result.inputPort}`);
   }
-}
-
-async function startStreamingToClient() {
-  const result = await streambridge.startStreamer();
-  if (!result.ok) {
-    logStatus(`Failed to start streamer: ${result.error}`);
-    return;
-  }
-  // Tell the client which ports to use
-  sendSignaling({ type: 'stream-info', videoPort: result.videoPort, inputPort: result.inputPort });
-  streamStatus.textContent = 'Streaming';
-  logStatus(`Streaming via UDP — video:${result.videoPort} input:${result.inputPort}`);
 }
 
 function sendSignaling(data) {
@@ -99,5 +105,7 @@ startBtn.addEventListener('click', async () => {
   connectSignaling(port);
   logStatus('Waiting for Fire Stick to connect...');
 });
+
+restartBtn.addEventListener('click', () => streambridge.restart());
 
 init();

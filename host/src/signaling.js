@@ -41,6 +41,12 @@ function createSignalingServer(port, onStatus) {
 
     ws.on('close', () => {
       onStatus(`Peer disconnected: ${peer} (${wss.clients.size} remaining)`);
+      // Notify remaining peers so the host can stop the streamer
+      wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({ type: 'peer-left' }));
+        }
+      });
     });
 
     ws.on('error', (err) => {
