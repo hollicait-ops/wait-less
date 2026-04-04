@@ -87,10 +87,12 @@ function preferH264(sdp) {
 async function startWebRTC(stream) {
   const pc = new RTCPeerConnection({ iceServers: [] });
 
-  // Hint to the encoder that this is screen content, not a camera feed.
-  // 'detail' mode preserves sharp edges and accurate colours; the default
-  // motion-optimised mode applies camera-style YUV encoding that shifts hues.
-  stream.getVideoTracks().forEach(track => { track.contentHint = 'detail'; });
+  // 'motion' tells the encoder to use camera-feed pacing: short GOP, low
+  // encoder buffer depth, frame-rate-first rate control. 'detail' (screenshare
+  // mode) uses a large temporal buffer that adds ~500ms–1s of encode latency.
+  // Colour accuracy is handled entirely in the Android renderer (BT.601 shader),
+  // so the content hint does not affect the received colour.
+  stream.getVideoTracks().forEach(track => { track.contentHint = 'motion'; });
 
   stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
@@ -117,6 +119,12 @@ async function startWebRTC(stream) {
         const params = sender.getParameters();
         if (params.encodings.length > 0) {
           params.encodings[0].maxBitrate = 12_000_000;
+          // Explicit framerate cap so the RTP pacer doesn't spread packets
+          // across a longer window than one frame period.
+          params.encodings[0].maxFramerate = 60;
+          // Prefer dropping quality over dropping frames when the congestion
+          // controller requests a rate reduction — keeps the pipeline moving.
+          params.encodings[0].degradationPreference = 'maintain-framerate';
           sender.setParameters(params).catch(err => console.warn('setParameters failed:', err));
         }
       }
