@@ -13,13 +13,15 @@ import org.webrtc.PeerConnectionFactory
 import org.webrtc.RtpReceiver
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
-import org.webrtc.SoftwareVideoDecoderFactory
+import org.webrtc.DefaultVideoDecoderFactory
+import org.webrtc.EglBase
 import org.webrtc.VideoSink
 import org.webrtc.VideoTrack
 
 class WebRTCManager(
     private val context: Context,
     private val renderer: VideoSink,
+    private val eglContext: EglBase.Context,
     private val onStatus: (String) -> Unit,
 ) {
     companion object {
@@ -48,7 +50,7 @@ class WebRTCManager(
         }
 
         factory = PeerConnectionFactory.builder()
-            .setVideoDecoderFactory(SoftwareVideoDecoderFactory())
+            .setVideoDecoderFactory(DefaultVideoDecoderFactory(eglContext))
             .createPeerConnectionFactory()
     }
 

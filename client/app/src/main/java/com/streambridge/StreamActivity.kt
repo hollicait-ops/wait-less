@@ -5,6 +5,7 @@ import android.view.KeyEvent
 import android.view.WindowManager
 import android.widget.TextView
 import androidx.fragment.app.FragmentActivity
+import org.webrtc.EglBase
 
 class StreamActivity : FragmentActivity() {
 
@@ -17,6 +18,7 @@ class StreamActivity : FragmentActivity() {
     private lateinit var tvHudStatus: TextView
 
     // Nullable so onDestroy is safe if onCreate exits early (missing EXTRA_HOST_IP)
+    private var eglBase: EglBase? = null
     private var signalingClient: SignalingClient? = null
     private var webRtcManager: WebRTCManager? = null
     private var inputHandler: InputHandler? = null
@@ -34,7 +36,11 @@ class StreamActivity : FragmentActivity() {
         val hostIp = intent.getStringExtra(EXTRA_HOST_IP) ?: run { finish(); return }
         val signalingUrl = "ws://$hostIp:$SIGNALING_PORT"
 
-        val mgr = WebRTCManager(this, surfaceView) { status ->
+        val base = EglBase.create()
+        eglBase = base
+        surfaceView.init(base.eglBaseContext)
+
+        val mgr = WebRTCManager(this, surfaceView, base.eglBaseContext) { status ->
             runOnUiThread { tvHudStatus.text = status }
         }
         webRtcManager = mgr
@@ -76,5 +82,8 @@ class StreamActivity : FragmentActivity() {
         super.onDestroy()
         signalingClient?.disconnect()
         webRtcManager?.dispose()
+        surfaceView.release()
+        eglBase?.release()
+        eglBase = null
     }
 }
