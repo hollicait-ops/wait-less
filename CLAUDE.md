@@ -123,6 +123,7 @@ Use a stopwatch displayed on the laptop screen and film both screens simultaneou
 
 - Node.js 20+
 - Electron 28+
+- **FFmpeg on PATH** (`winget install Gyan.FFmpeg`) — required for screen capture and H.264 encoding; the streamer will fail silently without it
 - Android Studio (for client builds) or just the Android SDK + Gradle
 - `adb` on PATH
 - Fire Stick with ADB debugging enabled (see above)
