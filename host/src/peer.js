@@ -118,7 +118,7 @@ async function startWebRTC(stream) {
       if (sender) {
         const params = sender.getParameters();
         if (params.encodings.length > 0) {
-          params.encodings[0].maxBitrate = 12_000_000;
+          params.encodings[0].maxBitrate = 30_000_000;
           // Explicit framerate cap so the RTP pacer doesn't spread packets
           // across a longer window than one frame period.
           params.encodings[0].maxFramerate = 60;
