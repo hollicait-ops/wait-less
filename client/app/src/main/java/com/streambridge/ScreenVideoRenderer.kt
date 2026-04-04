@@ -97,11 +97,10 @@ class ScreenVideoRenderer @JvmOverloads constructor(
             program = linkProgram(compileShader(GLES20.GL_VERTEX_SHADER, vertSrc),
                                   compileShader(GLES20.GL_FRAGMENT_SHADER, fragSrc))
             GLES20.glGenTextures(3, texIds, 0)
-            // Bilinear filtering: source is 720p upscaled to a 1080p display, so linear
-            // interpolation is needed to avoid pixel blocks. At 1:1 scale nearest-neighbour
-            // was preferable, but at 1.5x upscale GL_NEAREST produces severe blockiness.
+            // Nearest-neighbour: source is 1080p on a 1080p display (1:1 scale).
+            // GL_NEAREST preserves sharp pixel edges for text and UI content.
             for (id in texIds) {
-                val filter = GLES20.GL_LINEAR
+                val filter = GLES20.GL_NEAREST
                 GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, id)
                 GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, filter)
                 GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, filter)
