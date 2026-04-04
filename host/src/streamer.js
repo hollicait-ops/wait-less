@@ -83,7 +83,7 @@ function startStreamer({ clientIp, videoPort = VIDEO_PORT, inputPort = INPUT_POR
     '-color_primaries', 'bt709',
     '-color_trc', 'bt709',
     '-color_range', 'tv',
-    // chroma-qp-offset=-2: reduce chroma quantization aggressiveness by 2 steps.
+    // chroma-qp-offset=-4: reduce chroma quantization aggressiveness by 4 steps.
     // ultrafast over-quantizes UV in flat dark areas, leaving adjacent DCT blocks
     // alternating slightly above/below neutral chroma (128), which renders as
     // alternating magenta/green bands. A small negative offset gives UV channels
