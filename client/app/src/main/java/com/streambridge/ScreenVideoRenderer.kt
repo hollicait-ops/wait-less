@@ -15,12 +15,11 @@ import javax.microedition.khronos.opengles.GL10
 
 /**
  * WebRTC VideoSink that renders I420 frames using a BT.601 limited-range
- * YUV→RGB shader with a 0.97 G-channel gain to correct encoder-specific
- * colour drift. Replaces SurfaceViewRenderer to bypass the Fire OS hardware
- * decoder's incorrect colour matrix.
+ * YUV→RGB shader. Uses SoftwareVideoDecoderFactory so frames always arrive
+ * as I420 buffers — no OES texture path required.
  *
- * The decoder is kept as SoftwareVideoDecoderFactory so frames arrive as
- * I420 buffers — no OES texture path required.
+ * Tunable colour controls: [gGain] (green channel multiplier, default 0.97) and
+ * [blackLift] (shadow offset, default 0.0 — negative values crush shadows darker).
  */
 class ScreenVideoRenderer @JvmOverloads constructor(
     context: Context,
@@ -29,6 +28,10 @@ class ScreenVideoRenderer @JvmOverloads constructor(
 
     private val frameLock = Any()
     private var pendingFrame: VideoFrame? = null
+
+    // Tunable colour controls — set from any thread, read on the GL thread.
+    @Volatile var gGain: Float = 0.97f
+    @Volatile var blackLift: Float = 0.0f
 
     init {
         setEGLContextClientVersion(2)
@@ -48,21 +51,23 @@ class ScreenVideoRenderer @JvmOverloads constructor(
     private inner class I420Renderer : GLSurfaceView.Renderer {
 
         // BT.601 studio swing (limited range) — matches libyuv ARGBToI420 output.
-        // G_GAIN trims any residual green cast from encoder-specific matrix drift;
-        // 0.97 is a 3% reduction, tune towards 1.0 if the image looks too magenta.
+        // u_ggain (default 0.97) and u_lift (default 0.0) are tunable at runtime via
+        // ScreenVideoRenderer.gGain / blackLift.
         private val fragSrc = """
-            precision mediump float;
+            precision highp float;
             uniform sampler2D y_tex;
             uniform sampler2D u_tex;
             uniform sampler2D v_tex;
+            uniform float u_ggain;
+            uniform float u_lift;
             varying vec2 v_tc;
             void main() {
                 float y  = texture2D(y_tex, v_tc).r - 0.0627;
                 float cb = texture2D(u_tex, v_tc).r - 0.5020;
                 float cr = texture2D(v_tex, v_tc).r - 0.5020;
-                float r = clamp(1.1644*y + 1.5960*cr,              0.0, 1.0);
-                float g = clamp((1.1644*y - 0.3918*cb - 0.8130*cr) * 0.97, 0.0, 1.0);
-                float b = clamp(1.1644*y + 2.0172*cb,              0.0, 1.0);
+                float r = clamp(1.1644*y + 1.5960*cr              - u_lift, 0.0, 1.0);
+                float g = clamp((1.1644*y - 0.3918*cb - 0.8130*cr) * u_ggain - u_lift, 0.0, 1.0);
+                float b = clamp(1.1644*y + 2.0172*cb              - u_lift, 0.0, 1.0);
                 gl_FragColor = vec4(r, g, b, 1.0);
             }
         """.trimIndent()
@@ -85,16 +90,19 @@ class ScreenVideoRenderer @JvmOverloads constructor(
         private val texIds = IntArray(3)
         private var yLoc = 0; private var uLoc = 0; private var vLoc = 0
         private var posLoc = 0; private var tcLoc = 0; private var scaleLoc = 0
+        private var ggainLoc = 0; private var liftLoc = 0
         private var viewW = 0; private var viewH = 0
 
         override fun onSurfaceCreated(unused: GL10?, config: EGLConfig?) {
             program = linkProgram(compileShader(GLES20.GL_VERTEX_SHADER, vertSrc),
                                   compileShader(GLES20.GL_FRAGMENT_SHADER, fragSrc))
             GLES20.glGenTextures(3, texIds, 0)
-            // Nearest-neighbour for all planes: screen content has hard pixel edges
-            // and any chroma interpolation causes colour fringing around lines/text.
-            for (id in texIds) {
-                val filter = GLES20.GL_NEAREST
+            // Y plane (texIds[0]): GL_NEAREST — full-res luma, 1:1 with display pixels.
+            // U/V planes (texIds[1,2]): GL_LINEAR — half-res chroma (960x540 for 1080p).
+            // Nearest-neighbour on chroma causes hard colour fringing every 2 pixels;
+            // bilinear interpolation smooths the 2:1 chroma-to-luma step cleanly.
+            for ((i, id) in texIds.withIndex()) {
+                val filter = if (i == 0) GLES20.GL_NEAREST else GLES20.GL_LINEAR
                 GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, id)
                 GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, filter)
                 GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, filter)
@@ -104,9 +112,11 @@ class ScreenVideoRenderer @JvmOverloads constructor(
             yLoc   = GLES20.glGetUniformLocation(program, "y_tex")
             uLoc   = GLES20.glGetUniformLocation(program, "u_tex")
             vLoc   = GLES20.glGetUniformLocation(program, "v_tex")
-            posLoc  = GLES20.glGetAttribLocation(program, "a_pos")
-            tcLoc   = GLES20.glGetAttribLocation(program, "a_tc")
+            posLoc   = GLES20.glGetAttribLocation(program, "a_pos")
+            tcLoc    = GLES20.glGetAttribLocation(program, "a_tc")
             scaleLoc = GLES20.glGetUniformLocation(program, "u_scale")
+            ggainLoc = GLES20.glGetUniformLocation(program, "u_ggain")
+            liftLoc  = GLES20.glGetUniformLocation(program, "u_lift")
         }
 
         override fun onSurfaceChanged(unused: GL10?, w: Int, h: Int) {
@@ -138,6 +148,8 @@ class ScreenVideoRenderer @JvmOverloads constructor(
                     GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
                     GLES20.glUseProgram(program)
                     GLES20.glUniform2f(scaleLoc, sx, sy)
+                    GLES20.glUniform1f(ggainLoc, gGain)
+                    GLES20.glUniform1f(liftLoc, blackLift)
 
                     bindTex(0, texIds[0], yLoc)
                     bindTex(1, texIds[1], uLoc)
