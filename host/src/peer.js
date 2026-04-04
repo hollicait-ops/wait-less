@@ -125,11 +125,9 @@ async function startWebRTC(stream) {
           // Prefer dropping quality over dropping frames when the congestion
           // controller requests a rate reduction — keeps the pipeline moving.
           params.encodings[0].degradationPreference = 'maintain-framerate';
+          const e = params.encodings[0];
           sender.setParameters(params)
-            .then(() => {
-              const e = sender.getParameters().encodings[0];
-              console.log(`[peer] encoding params applied — maxBitrate:${e.maxBitrate} maxFramerate:${e.maxFramerate} degradation:${e.degradationPreference}`);
-            })
+            .then(() => console.log(`[peer] encoding params applied — maxBitrate:${e.maxBitrate} maxFramerate:${e.maxFramerate} degradation:${e.degradationPreference}`))
             .catch(err => console.warn('setParameters failed:', err));
         }
       }
