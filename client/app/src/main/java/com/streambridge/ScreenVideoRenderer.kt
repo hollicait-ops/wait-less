@@ -226,6 +226,10 @@ class ScreenVideoRenderer @JvmOverloads constructor(
 
         EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)
 
+        // Don't block on vsync — present immediately. The display compositor handles
+        // actual vsync; blocking here just adds a frame of buffering latency.
+        EGL14.eglSwapInterval(eglDisplay, 0)
+
         initGl()
     }
 
