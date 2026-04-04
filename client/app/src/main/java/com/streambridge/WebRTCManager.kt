@@ -144,7 +144,13 @@ class WebRTCManager(
 
         val rtcConfig = PeerConnection.RTCConfiguration(emptyList()).apply {
             sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
-            // LAN-only — no TURN or STUN server needed
+            // LAN-only — no TURN or STUN server needed.
+            // Disable TCP candidates: on a LAN, TCP fallback only adds head-of-line
+            // blocking latency; UDP should always win ICE on a local network.
+            tcpCandidatePolicy = PeerConnection.TcpCandidatePolicy.DISABLED
+            // Fast-converge the audio jitter buffer so A/V stays in sync when
+            // the video path is already low-latency.
+            audioJitterBufferFastAccelerate = true
         }
 
         return factory?.createPeerConnection(rtcConfig, object : PeerConnection.Observer {
