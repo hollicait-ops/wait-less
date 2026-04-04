@@ -1,10 +1,7 @@
-// Renderer process — WebRTC offerer
-// SB-3: Signaling WS connection + UI wiring
-// SB-4: Screen/audio capture + WebRTC peer connection
+// Renderer process — signaling + stream control
+// SB-21: replaced WebRTC peer/offer flow with FFmpeg+UDP streamer
 
 let signalingWs = null;
-let peerConnection = null;
-let activeStream = null;
 
 // --- UI refs ---
 const ipDisplay = document.getElementById('ip-display');
@@ -37,8 +34,8 @@ function connectSignaling(port) {
   signalingWs = new WebSocket(url);
 
   signalingWs.onopen = () => {
-    logStatus('Renderer connected to signaling server');
-    streamStatus.textContent = 'Signaling connected — waiting for client...';
+    logStatus('Signaling connected — waiting for client...');
+    streamStatus.textContent = 'Waiting for client...';
   };
 
   signalingWs.onmessage = async (event) => {
@@ -46,7 +43,7 @@ function connectSignaling(port) {
     try {
       msg = JSON.parse(event.data);
     } catch (err) {
-      logStatus(`Signaling: received unparseable message — ${err.message}`);
+      logStatus(`Signaling: unparseable message — ${err.message}`);
       return;
     }
     await handleSignalingMessage(msg);
@@ -66,27 +63,27 @@ function connectSignaling(port) {
 
 async function handleSignalingMessage(msg) {
   if (msg.type === 'peer-joined') {
-    if (activeStream) {
-      if (peerConnection) {
-        peerConnection.close();
-        peerConnection = null;
-      }
-      logStatus('Client joined — re-sending offer...');
-      await startWebRTC(activeStream);
-    }
+    logStatus('Client joined — starting streamer and sending stream-info...');
+    await startStreamingToClient();
     return;
   }
 
-  if (!peerConnection) return;
-
-  if (msg.type === 'answer') {
-    const desc = new RTCSessionDescription(msg);
-    await peerConnection.setRemoteDescription(desc);
-    logStatus('Remote SDP answer applied');
+  if (msg.type === 'client-ready') {
+    logStatus('Client ready — stream active');
     streamStatus.textContent = 'Streaming';
-  } else if (msg.type === 'ice-candidate' && msg.candidate) {
-    await peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate));
   }
+}
+
+async function startStreamingToClient() {
+  const result = await streambridge.startStreamer();
+  if (!result.ok) {
+    logStatus(`Failed to start streamer: ${result.error}`);
+    return;
+  }
+  // Tell the client which ports to use
+  sendSignaling({ type: 'stream-info', videoPort: result.videoPort, inputPort: result.inputPort });
+  streamStatus.textContent = 'Streaming';
+  logStatus(`Streaming via UDP — video:${result.videoPort} input:${result.inputPort}`);
 }
 
 function sendSignaling(data) {
@@ -100,34 +97,7 @@ startBtn.addEventListener('click', async () => {
   startBtn.disabled = true;
   const port = await streambridge.getSignalingPort();
   connectSignaling(port);
-
-  let stream;
-  try {
-    logStatus('Starting screen capture...');
-    stream = await startCapture();
-    activeStream = stream;
-    logStatus(`Capture started — ${stream.getTracks().length} track(s)`);
-    await startWebRTC(stream);
-    logStatus('Offer sent — waiting for client to answer');
-    streamStatus.textContent = 'Waiting for client...';
-  } catch (err) {
-    if (stream) stream.getTracks().forEach(t => t.stop());
-    logStatus(`Failed to start: ${err.message}`);
-    if (signalingWs) {
-      signalingWs.onclose = null;
-      signalingWs.close();
-      signalingWs = null;
-    }
-    streamStatus.textContent = 'Waiting for connection...';
-    startBtn.disabled = false;
-  }
+  logStatus('Waiting for Fire Stick to connect...');
 });
-
-// Hooks used by peer.js — set before any signaling messages arrive from the
-// remote peer, otherwise incoming SDP answers and ICE candidates are silently
-// dropped (handleSignalingMessage guards on peerConnection being non-null).
-window.sendSignaling = sendSignaling;
-window.setPeerConnection = (pc) => { peerConnection = pc; };
-window.updateStreamStatus = (msg) => { streamStatus.textContent = msg; };
 
 init();

@@ -4,15 +4,12 @@ import android.view.KeyEvent
 
 /**
  * Bridges Android KeyEvent codes to InputMapper and sends resulting
- * InputEvents over the WebRTC DataChannel.
+ * InputEvents over UDP via [UdpVideoReceiver].
  */
-class InputHandler(private val webRtcManager: WebRTCManager) {
+class InputHandler(private val receiver: UdpVideoReceiver) {
 
     private val mapper = InputMapper()
 
-    // Single source of truth for direction keys — both isDpadDirection and
-    // keyCodeToEvent derive from this map, so adding a new direction key here
-    // is the only change needed.
     private val dpadToDirection = mapOf(
         KeyEvent.KEYCODE_DPAD_UP    to InputMapper.Direction.UP,
         KeyEvent.KEYCODE_DPAD_DOWN  to InputMapper.Direction.DOWN,
@@ -20,19 +17,16 @@ class InputHandler(private val webRtcManager: WebRTCManager) {
         KeyEvent.KEYCODE_DPAD_RIGHT to InputMapper.Direction.RIGHT,
     )
 
-    /**
-     * Returns true if the key was handled (consumed), false otherwise.
-     */
     fun onKeyDown(keyCode: Int): Boolean {
         val event = keyCodeToEvent(keyCode, pressed = true) ?: return false
-        webRtcManager.sendDataChannelMessage(event.toJson())
+        receiver.sendInputEvent(event.toJson())
         return true
     }
 
     fun onKeyUp(keyCode: Int): Boolean {
         if (keyCode in dpadToDirection) mapper.resetAcceleration()
         val event = keyCodeToEvent(keyCode, pressed = false) ?: return false
-        webRtcManager.sendDataChannelMessage(event.toJson())
+        receiver.sendInputEvent(event.toJson())
         return true
     }
 

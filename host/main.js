@@ -1,14 +1,18 @@
-const { app, BrowserWindow, ipcMain, screen, desktopCapturer } = require('electron');
+const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const os = require('os');
 const path = require('path');
 const { createSignalingServer } = require('./src/signaling');
 const { replayInputEvent } = require('./src/input');
+const { startStreamer, stopStreamer, VIDEO_PORT, INPUT_PORT } = require('./src/streamer');
 
 const SIGNALING_PORT = 8080;
 
 let mainWindow = null;
 let signalingServer = null;
 let robot = null;
+
+// IP of the most recently connected signaling client — used as the UDP stream target
+let lastClientIp = null;
 
 function getLocalIP() {
   const interfaces = os.networkInterfaces();
@@ -40,8 +44,12 @@ function createWindow() {
 }
 
 function startSignalingServer() {
-  signalingServer = createSignalingServer(SIGNALING_PORT, (msg) => {
+  signalingServer = createSignalingServer(SIGNALING_PORT, (msg, meta) => {
     console.log('[signaling]', msg);
+    if (meta && meta.clientIp) {
+      lastClientIp = meta.clientIp;
+      console.log('[main] client IP recorded:', lastClientIp);
+    }
     if (mainWindow) {
       mainWindow.webContents.send('signaling-status', msg);
     }
@@ -56,17 +64,38 @@ function loadRobotjs() {
   }
 }
 
-ipcMain.on('input-event', (_event, data) => {
-  if (!robot) return;
-  replayInputEvent(robot, screen.getPrimaryDisplay().size, data);
+// ---- IPC handlers ----
+
+// Renderer asks main to start the FFmpeg streamer targeting the last-seen client IP
+ipcMain.handle('start-streamer', () => {
+  if (!lastClientIp) {
+    console.warn('[main] start-streamer called but no client IP known yet');
+    return { ok: false, error: 'No client connected' };
+  }
+  startStreamer({
+    clientIp: lastClientIp,
+    videoPort: VIDEO_PORT,
+    inputPort: INPUT_PORT,
+    onInput: (event) => {
+      if (!robot) return;
+      replayInputEvent(robot, screen.getPrimaryDisplay().size, event);
+    },
+    onLog: (msg) => {
+      console.log(msg);
+      if (mainWindow) mainWindow.webContents.send('signaling-status', msg);
+    },
+  });
+  return { ok: true, videoPort: VIDEO_PORT, inputPort: INPUT_PORT };
+});
+
+ipcMain.handle('stop-streamer', () => {
+  stopStreamer();
+  return { ok: true };
 });
 
 ipcMain.handle('get-local-ip', () => getLocalIP());
 ipcMain.handle('get-signaling-port', () => SIGNALING_PORT);
-ipcMain.handle('get-desktop-sources', async () => {
-  const sources = await desktopCapturer.getSources({ types: ['screen'] });
-  return sources.map(({ id, name }) => ({ id, name }));
-});
+ipcMain.handle('get-stream-ports', () => ({ videoPort: VIDEO_PORT, inputPort: INPUT_PORT }));
 
 app.whenReady().then(() => {
   loadRobotjs();
@@ -75,6 +104,7 @@ app.whenReady().then(() => {
 });
 
 app.on('before-quit', () => {
+  stopStreamer();
   if (signalingServer) signalingServer.close();
 });
 

@@ -9,27 +9,21 @@ import okhttp3.WebSocketListener
 import org.json.JSONObject
 
 // ---------------------------------------------------------------------------
-// Message parsing — no Android imports, fully unit-testable
+// Message parsing
 // ---------------------------------------------------------------------------
 
 sealed class SignalingMessage {
-    data class Offer(val json: JSONObject) : SignalingMessage()
-    data class Answer(val json: JSONObject) : SignalingMessage()
-    data class IceCandidate(val json: JSONObject) : SignalingMessage()
+    data class StreamInfo(val videoPort: Int, val inputPort: Int) : SignalingMessage()
 }
 
-/**
- * Parse a raw WebSocket text frame into a [SignalingMessage].
- * Returns null if the text is not valid JSON, has no "type" field,
- * or carries an unrecognised type.
- */
 fun parseSignalingMessage(text: String): SignalingMessage? {
     val json = runCatching { JSONObject(text) }.getOrNull() ?: return null
     return when (json.optString("type")) {
-        "offer"         -> SignalingMessage.Offer(json)
-        "answer"        -> SignalingMessage.Answer(json)
-        "ice-candidate" -> SignalingMessage.IceCandidate(json)
-        else            -> null
+        "stream-info" -> SignalingMessage.StreamInfo(
+            videoPort = json.optInt("videoPort", 9000),
+            inputPort  = json.optInt("inputPort",  9001),
+        )
+        else -> null
     }
 }
 
@@ -38,20 +32,20 @@ fun parseSignalingMessage(text: String): SignalingMessage? {
 // ---------------------------------------------------------------------------
 
 /**
- * WebSocket signaling client. Connects to the Electron host signaling server,
- * parses incoming SDP/ICE messages, and dispatches them to [WebRTCManager].
- * Connection state changes are reported via [Listener].
+ * WebSocket signaling client. Connects to the host, receives stream-info,
+ * and reports connection state via [Listener].
  */
 class SignalingClient(
     private val url: String,
-    private val webRtcManager: WebRTCManager,
     private val listener: Listener,
 ) {
     companion object {
         private const val TAG = "SignalingClient"
     }
+
     interface Listener {
         fun onConnected()
+        fun onStreamInfo(videoPort: Int, inputPort: Int)
         fun onDisconnected(reason: String)
         fun onError(message: String)
     }
@@ -65,17 +59,15 @@ class SignalingClient(
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.i(TAG, "Connected to $url")
                 listener.onConnected()
+                // Tell the host we are ready — triggers stream-info reply
+                webSocket.send("""{"type":"client-ready"}""")
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 Log.d(TAG, "Received: ${text.take(120)}")
                 when (val msg = parseSignalingMessage(text)) {
-                    is SignalingMessage.Offer         -> webRtcManager.onRemoteOffer(msg.json)
-                    // Answer path is unused in normal flow (we are the answerer, not the offerer),
-                    // but forwarded for completeness in case of a re-offer scenario.
-                    is SignalingMessage.Answer        -> webRtcManager.onRemoteAnswer(msg.json)
-                    is SignalingMessage.IceCandidate  -> webRtcManager.onRemoteIceCandidate(msg.json)
-                    null                              -> Log.w(TAG, "Ignored unrecognised message: ${text.take(80)}")
+                    is SignalingMessage.StreamInfo -> listener.onStreamInfo(msg.videoPort, msg.inputPort)
+                    null -> Log.w(TAG, "Ignored unrecognised message: ${text.take(80)}")
                 }
             }
 
@@ -91,13 +83,7 @@ class SignalingClient(
         })
     }
 
-    fun send(json: JSONObject) {
-        ws?.send(json.toString())
-    }
-
     fun disconnect() {
         ws?.close(1000, "Activity destroyed")
-        // Do not shut down client.dispatcher.executorService — OkHttp manages its own
-        // thread pool lifecycle and shutting it down would break any reconnect attempt.
     }
 }
