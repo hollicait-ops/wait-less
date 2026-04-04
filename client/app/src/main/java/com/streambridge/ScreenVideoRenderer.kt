@@ -14,10 +14,9 @@ import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 
 /**
- * WebRTC VideoSink that renders video frames using a BT.601 limited-range
- * YUV→RGB shader. Handles both I420 buffers (software decode fallback) and
- * TextureBuffers (hardware decode via DefaultVideoDecoderFactory) — TextureBuffer
- * frames are converted to I420 via toI420() which handles its own EGL context.
+ * WebRTC VideoSink that renders I420 frames using a BT.601 limited-range
+ * YUV→RGB shader. Uses SoftwareVideoDecoderFactory so frames always arrive
+ * as I420 buffers — no OES texture path required.
  *
  * Tunable colour controls: [gGain] (green channel multiplier, default 0.97) and
  * [blackLift] (shadow offset, default 0.0 — negative values crush shadows darker).
