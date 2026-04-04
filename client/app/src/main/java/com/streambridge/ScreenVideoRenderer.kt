@@ -275,10 +275,10 @@ class ScreenVideoRenderer @JvmOverloads constructor(
         val texMatrix = FloatArray(16)
         st.getTransformMatrix(texMatrix)
 
-        // SurfaceTexture.intrinsicWidth/Height are only available on API 30+;
-        // fall back to 1920x1080 (our fixed encode resolution) on older APIs.
-        val frameW = if (android.os.Build.VERSION.SDK_INT >= 30) st.width.takeIf { it > 0 } ?: 1920 else 1920
-        val frameH = if (android.os.Build.VERSION.SDK_INT >= 30) st.height.takeIf { it > 0 } ?: 1080 else 1080
+        // FFmpeg encodes at a fixed 1920x1080; use that for aspect ratio calculation.
+        // SurfaceTexture does not expose decoded frame dimensions directly.
+        val frameW = 1920
+        val frameH = 1080
         val (sx, sy) = aspectScale(frameW, frameH)
 
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
