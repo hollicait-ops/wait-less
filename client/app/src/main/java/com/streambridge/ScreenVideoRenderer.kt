@@ -45,6 +45,7 @@ class ScreenVideoRenderer @JvmOverloads constructor(
 
     @Volatile var gGain: Float = 0.97f
     @Volatile var blackLift: Float = 0.0f
+    @Volatile private var drawPending = false
 
     private var sharedContext: android.opengl.EGLContext = EGL14.EGL_NO_CONTEXT
     private var glThread: HandlerThread? = null
@@ -156,7 +157,12 @@ class ScreenVideoRenderer @JvmOverloads constructor(
             pendingFrame?.release()
             pendingFrame = frame
         }
-        glHandler?.post(::drawFrame)
+        // Only post if no draw is already queued — avoids handler queue buildup
+        // when frames arrive faster than we can draw them.
+        if (!drawPending) {
+            drawPending = true
+            glHandler?.post(::drawFrame)
+        }
     }
 
     fun release() {
@@ -293,6 +299,7 @@ class ScreenVideoRenderer @JvmOverloads constructor(
     // ---- Drawing (glThread only) ----
 
     private fun drawFrame() {
+        drawPending = false
         if (!glInitialized || viewW == 0 || viewH == 0) return
         val frame = synchronized(frameLock) { pendingFrame.also { pendingFrame = null } } ?: return
 
