@@ -97,10 +97,12 @@ class ScreenVideoRenderer @JvmOverloads constructor(
             program = linkProgram(compileShader(GLES20.GL_VERTEX_SHADER, vertSrc),
                                   compileShader(GLES20.GL_FRAGMENT_SHADER, fragSrc))
             GLES20.glGenTextures(3, texIds, 0)
-            // Nearest-neighbour: source is 1080p on a 1080p display (1:1 scale).
-            // GL_NEAREST preserves sharp pixel edges for text and UI content.
-            for (id in texIds) {
-                val filter = GLES20.GL_NEAREST
+            // Y plane (texIds[0]): GL_NEAREST — full-res luma, 1:1 with display pixels.
+            // U/V planes (texIds[1,2]): GL_LINEAR — half-res chroma (960x540 for 1080p).
+            // Nearest-neighbour on chroma causes hard colour fringing every 2 pixels;
+            // bilinear interpolation smooths the 2:1 chroma-to-luma step cleanly.
+            for ((i, id) in texIds.withIndex()) {
+                val filter = if (i == 0) GLES20.GL_NEAREST else GLES20.GL_LINEAR
                 GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, id)
                 GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, filter)
                 GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, filter)
