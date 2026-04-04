@@ -19,6 +19,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * WebRTC VideoSink that renders video frames using manual EGL14 context management.
@@ -45,11 +46,13 @@ class ScreenVideoRenderer @JvmOverloads constructor(
 
     @Volatile var gGain: Float = 0.97f
     @Volatile var blackLift: Float = 0.0f
-    @Volatile private var drawPending = false
+    private val drawPending = AtomicBoolean(false)
 
-    private var sharedContext: android.opengl.EGLContext = EGL14.EGL_NO_CONTEXT
+    @Volatile private var sharedContext: android.opengl.EGLContext = EGL14.EGL_NO_CONTEXT
     private var glThread: HandlerThread? = null
-    private var glHandler: Handler? = null
+    @Volatile private var glHandler: Handler? = null
+    // Surface stored here if surfaceCreated fires before init() — init() drains it.
+    @Volatile private var pendingSurface: android.view.Surface? = null
 
     // ---- EGL14 state (touched only on glThread) ----
     private var eglDisplay: android.opengl.EGLDisplay = EGL14.EGL_NO_DISPLAY
@@ -145,10 +148,21 @@ class ScreenVideoRenderer @JvmOverloads constructor(
     // ---- Public API ----
 
     fun init(eglContext: EglBase.Context) {
-        sharedContext = (eglContext as EglBase14.Context).rawContext
+        val raw = (eglContext as? EglBase14.Context)?.rawContext
+        if (raw == null) {
+            Log.e(TAG, "EglBase.Context is not EglBase14 — hardware decode requires EGL14; renderer will not initialise")
+            return
+        }
+        sharedContext = raw
         holder.addCallback(this)
         glThread = HandlerThread("ScreenVideoRenderer").also { it.start() }
-        glHandler = Handler(glThread!!.looper)
+        glHandler = Handler(glThread!!.looper).also { handler ->
+            // If surfaceCreated already fired before init() was called, drain it now.
+            pendingSurface?.let { surface ->
+                pendingSurface = null
+                handler.post { initEgl(surface) }
+            }
+        }
     }
 
     override fun onFrame(frame: VideoFrame) {
@@ -159,8 +173,7 @@ class ScreenVideoRenderer @JvmOverloads constructor(
         }
         // Only post if no draw is already queued — avoids handler queue buildup
         // when frames arrive faster than we can draw them.
-        if (!drawPending) {
-            drawPending = true
+        if (drawPending.compareAndSet(false, true)) {
             glHandler?.post(::drawFrame)
         }
     }
@@ -182,7 +195,13 @@ class ScreenVideoRenderer @JvmOverloads constructor(
     // ---- SurfaceHolder.Callback ----
 
     override fun surfaceCreated(holder: SurfaceHolder) {
-        glHandler?.post { initEgl(holder.surface) }
+        val handler = glHandler
+        if (handler != null) {
+            handler.post { initEgl(holder.surface) }
+        } else {
+            // init() hasn't been called yet — stash the surface; init() will drain it.
+            pendingSurface = holder.surface
+        }
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, w: Int, h: Int) {
@@ -195,6 +214,7 @@ class ScreenVideoRenderer @JvmOverloads constructor(
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
+        pendingSurface = null
         val handler = glHandler ?: return
         val latch = CountDownLatch(1)
         handler.post {
@@ -222,7 +242,10 @@ class ScreenVideoRenderer @JvmOverloads constructor(
         val configs = arrayOfNulls<android.opengl.EGLConfig>(1)
         val numConfigs = IntArray(1)
         EGL14.eglChooseConfig(eglDisplay, configAttribs, 0, configs, 0, 1, numConfigs, 0)
-        val eglConfig = configs[0]!!
+        val eglConfig = configs[0] ?: run {
+            Log.e(TAG, "eglChooseConfig returned no configs — EGL init failed")
+            return
+        }
 
         val contextAttribs = intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 2, EGL14.EGL_NONE)
         eglContext = EGL14.eglCreateContext(eglDisplay, eglConfig, sharedContext, contextAttribs, 0)
@@ -241,6 +264,7 @@ class ScreenVideoRenderer @JvmOverloads constructor(
 
     private fun releaseEgl() {
         glInitialized = false
+        synchronized(frameLock) { pendingFrame?.release(); pendingFrame = null }
         if (eglDisplay != EGL14.EGL_NO_DISPLAY) {
             EGL14.eglMakeCurrent(eglDisplay, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
             if (eglSurface != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(eglDisplay, eglSurface)
@@ -299,7 +323,7 @@ class ScreenVideoRenderer @JvmOverloads constructor(
     // ---- Drawing (glThread only) ----
 
     private fun drawFrame() {
-        drawPending = false
+        drawPending.set(false)
         if (!glInitialized || viewW == 0 || viewH == 0) return
         val frame = synchronized(frameLock) { pendingFrame.also { pendingFrame = null } } ?: return
 
@@ -308,7 +332,7 @@ class ScreenVideoRenderer @JvmOverloads constructor(
             if (buffer is VideoFrame.TextureBuffer && buffer.type == VideoFrame.TextureBuffer.Type.OES) {
                 drawOes(buffer, frame.rotatedWidth, frame.rotatedHeight)
             } else {
-                val i420 = buffer.toI420() ?: run { frame.release(); return }
+                val i420 = buffer.toI420() ?: return
                 try {
                     drawI420(i420)
                 } finally {
