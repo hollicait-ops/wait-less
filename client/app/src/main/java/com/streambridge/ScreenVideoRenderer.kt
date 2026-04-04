@@ -51,7 +51,8 @@ class ScreenVideoRenderer @JvmOverloads constructor(
     private inner class I420Renderer : GLSurfaceView.Renderer {
 
         // BT.601 studio swing (limited range) — matches libyuv ARGBToI420 output.
-        // u_ggain and u_lift are tunable at runtime via ScreenVideoRenderer.gGain / blackLift.
+        // u_ggain (default 0.97) and u_lift (default 0.0) are tunable at runtime via
+        // ScreenVideoRenderer.gGain / blackLift.
         private val fragSrc = """
             precision highp float;
             uniform sampler2D y_tex;
