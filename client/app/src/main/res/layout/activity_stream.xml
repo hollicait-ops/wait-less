@@ -4,11 +4,12 @@
     android:layout_height="match_parent"
     android:background="@android:color/black">
 
-    <!-- WebRTC video renderer — filled by WebRTCManager -->
+    <!-- Video surface — dimensions constrained to 16:9 in StreamActivity -->
     <com.streambridge.ScreenVideoRenderer
         android:id="@+id/surface_view"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"
+        android:layout_gravity="center" />
 
     <!-- HUD overlay: status + latency, hidden by default -->
     <LinearLayout

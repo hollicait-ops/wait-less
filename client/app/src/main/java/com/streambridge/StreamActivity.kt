@@ -2,12 +2,15 @@ package com.streambridge
 
 import android.os.Bundle
 import android.util.Log
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.WindowManager
+import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.fragment.app.FragmentActivity
+import kotlin.math.roundToInt
 
 class StreamActivity : FragmentActivity() {
 
@@ -41,6 +44,8 @@ class StreamActivity : FragmentActivity() {
 
         surfaceView = findViewById(R.id.surface_view)
         tvHudStatus = findViewById(R.id.tv_hud_status)
+
+        constrainSurfaceViewAspectRatio()
 
         hostIp = intent.getStringExtra(EXTRA_HOST_IP) ?: run { finish(); return }
 
@@ -89,6 +94,38 @@ class StreamActivity : FragmentActivity() {
         )
 
         signalingClient?.connect()
+    }
+
+    /**
+     * Constrains the SurfaceView to the encoded video's aspect ratio (1920x1080 = 16:9),
+     * centered on screen with black bars on whichever axis has spare pixels.
+     * Without this, MediaCodec scales its output to fill the full view dimensions,
+     * stretching the image when the display aspect ratio differs even slightly.
+     */
+    private fun constrainSurfaceViewAspectRatio() {
+        val screenW = resources.displayMetrics.widthPixels
+        val screenH = resources.displayMetrics.heightPixels
+        val videoAspect = 1920f / 1080f
+        val screenAspect = screenW.toFloat() / screenH.toFloat()
+
+        val viewW: Int
+        val viewH: Int
+        if (screenAspect > videoAspect) {
+            // Screen wider than video: pillarbox
+            viewH = screenH
+            viewW = (screenH * videoAspect).roundToInt()
+        } else {
+            // Screen taller or equal: letterbox
+            viewW = screenW
+            viewH = (screenW / videoAspect).roundToInt()
+        }
+
+        surfaceView.layoutParams = (surfaceView.layoutParams as FrameLayout.LayoutParams).apply {
+            width = viewW
+            height = viewH
+            gravity = Gravity.CENTER
+        }
+        Log.i(TAG, "SurfaceView constrained to ${viewW}x${viewH} (screen ${screenW}x${screenH})")
     }
 
     // Must be called on the main thread (enforced by callers above).
