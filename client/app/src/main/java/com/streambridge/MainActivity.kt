@@ -8,7 +8,6 @@ import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
-import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import androidx.fragment.app.FragmentActivity
@@ -16,7 +15,7 @@ import androidx.fragment.app.FragmentActivity
 class MainActivity : FragmentActivity() {
 
     private lateinit var etHostIp: EditText
-    private lateinit var btnConnect: Button
+    private lateinit var btnConnect: TextView
     private lateinit var tvStatus: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {

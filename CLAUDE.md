@@ -1,6 +1,6 @@
-# StreamBridge — Claude Code Instructions
+# WaitLess — Claude Code Instructions
 
-StreamBridge is a low-latency wireless screen streaming app. It streams the Windows host PC display and audio to a Fire Stick over a local WiFi network. Measured glass-to-glass latency is ~120-150ms. The architecture mirrors Steam Link: a host process on the PC captures, encodes, and streams; a native Android app on the Fire Stick decodes and renders.
+WaitLess is a low-latency wireless screen streaming app. It streams the Windows host PC display and audio to a Fire Stick over a local WiFi network. Measured glass-to-glass latency is ~120-150ms. The architecture mirrors Steam Link: a host process on the PC captures, encodes, and streams; a native Android app on the Fire Stick decodes and renders.
 
 **Latency budget (measured):** ~130ms gdigrab capture, ~7ms client decode, ~5ms WiFi/UDP. The gdigrab GDI capture is the dominant bottleneck; DXGI (ddagrab) would reduce this but requires D3D11-to-CUDA interop not currently available.
 
@@ -9,7 +9,7 @@ StreamBridge is a low-latency wireless screen streaming app. It streams the Wind
 ## Project Structure
 
 ```
-streambridge/
+waitless/
 ├── CLAUDE.md                  # This file
 ├── architecture.md            # Full system design
 ├── .claude/
@@ -30,7 +30,7 @@ streambridge/
     ├── app/
     │   └── src/main/
     │       ├── AndroidManifest.xml
-    │       └── java/com/streambridge/
+    │       └── java/com/waitless/
     │           ├── MainActivity.kt        # Entry point, IP input screen
     │           ├── StreamActivity.kt      # Fullscreen video render
     │           ├── SignalingClient.kt     # WebSocket signaling (OkHttp)
@@ -91,7 +91,7 @@ Enable ADB on Fire Stick: Settings → My Fire TV → Developer Options → ADB 
 
 ### Testing Latency
 
-The Electron UI has a built-in latency clock and dual-screen capture tool (hidden by default). Enable with `STREAMBRIDGE_DEBUG=1` environment variable before launching. The clock displays milliseconds on screen (captured by gdigrab into the stream); compare host vs Fire Stick values for glass-to-glass latency. The "Capture latency" button takes simultaneous screenshots of both screens, but adb timing variance makes phone-camera comparison more accurate for precise measurements.
+The Electron UI has a built-in latency clock and dual-screen capture tool (hidden by default). Enable with `WAITLESS_DEBUG=1` environment variable before launching. The clock displays milliseconds on screen (captured by gdigrab into the stream); compare host vs Fire Stick values for glass-to-glass latency. The "Capture latency" button takes simultaneous screenshots of both screens, but adb timing variance makes phone-camera comparison more accurate for precise measurements.
 
 Pipeline instrumentation logging (queue wait, decode time, chunk gaps) is also gated behind debug mode. Check Electron status log and `adb logcat -s UdpVideoReceiver:V` for `[latency]` entries.
 

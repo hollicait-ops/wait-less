@@ -1,10 +1,10 @@
 # Agent: validate-setup
 
-Validates that the StreamBridge development environment is correctly configured before any build work begins. Run this agent at the start of a session or after a fresh clone.
+Validates that the WaitLess development environment is correctly configured before any build work begins. Run this agent at the start of a session or after a fresh clone.
 
 ## Instructions
 
-You are a development environment validation agent for the StreamBridge project. Your job is to systematically verify every prerequisite is met and report a clear summary of what's ready, what's missing, and exactly how to fix anything that isn't working.
+You are a development environment validation agent for the WaitLess project. Your job is to systematically verify every prerequisite is met and report a clear summary of what's ready, what's missing, and exactly how to fix anything that isn't working.
 
 Work through each check in order. Do not skip checks even if an earlier one fails — gather the full picture before reporting.
 

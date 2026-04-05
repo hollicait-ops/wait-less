@@ -4,8 +4,15 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:gravity="center"
-    android:background="@android:color/black"
+    android:background="#130F32"
     android:padding="48dp">
+
+    <ImageView
+        android:layout_width="80dp"
+        android:layout_height="80dp"
+        android:src="@mipmap/ic_launcher"
+        android:layout_marginBottom="16dp"
+        android:contentDescription="@string/app_name" />
 
     <TextView
         android:id="@+id/tv_title"
@@ -13,7 +20,8 @@
         android:layout_height="wrap_content"
         android:text="@string/app_name"
         android:textSize="32sp"
-        android:textColor="@android:color/white"
+        android:textColor="#08F7FA"
+        android:fontFamily="sans-serif-light"
         android:layout_marginBottom="32dp" />
 
     <EditText
@@ -22,23 +30,36 @@
         android:layout_height="wrap_content"
         android:hint="@string/hint_host_ip"
         android:inputType="text"
-        android:textColor="@android:color/white"
-        android:textColorHint="#888888"
-        android:background="@android:color/darker_gray"
-        android:padding="12dp"
+        android:textColor="#FFFFFF"
+        android:textColorHint="#8090B0"
+        android:background="#1E2650"
+        android:padding="14dp"
+        android:textSize="16sp"
+        android:fontFamily="monospace"
         android:layout_marginBottom="24dp" />
 
-    <Button
+    <TextView
         android:id="@+id/btn_connect"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/btn_connect" />
+        android:text="@string/btn_connect"
+        android:textColor="#130F32"
+        android:textStyle="bold"
+        android:textSize="14sp"
+        android:background="@drawable/btn_connect_bg"
+        android:paddingStart="30dp"
+        android:paddingEnd="30dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp"
+        android:focusable="true"
+        android:clickable="true" />
 
     <TextView
         android:id="@+id/tv_status"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textColor="@android:color/white"
+        android:textColor="#F776F5"
+        android:textSize="14sp"
         android:layout_marginTop="24dp" />
 
 </LinearLayout>

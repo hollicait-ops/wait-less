@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "StreamBridge"
+rootProject.name = "WaitLess"
 include ':app'

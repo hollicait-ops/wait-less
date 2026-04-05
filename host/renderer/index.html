@@ -4,12 +4,12 @@
   <meta charset="UTF-8">
   <!-- connect-src port must match SIGNALING_PORT in main.js -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self' ws://localhost:8080">
-  <title>StreamBridge</title>
+  <title>WaitLess</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #1a1a2e;
+      background: #130f32;
       color: #e0e0e0;
       height: 100vh;
       display: flex;
@@ -19,11 +19,11 @@
       gap: 20px;
       padding: 24px;
     }
-    h1 { font-size: 1.4rem; font-weight: 600; color: #7eb8f7; }
+    h1 { font-size: 1.4rem; font-weight: 600; color: #08f7fa; }
     .ip-block {
       text-align: center;
     }
-    .ip-label { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 0.08em; }
+    .ip-label { font-size: 0.75rem; color: #8090b0; text-transform: uppercase; letter-spacing: 0.08em; }
     .ip-value {
       font-size: 2rem;
       font-weight: 700;
@@ -31,13 +31,13 @@
       color: #fff;
       margin-top: 4px;
     }
-    .port-value { font-size: 0.9rem; color: #aaa; margin-top: 2px; }
+    .port-value { font-size: 0.9rem; color: #8090b0; margin-top: 2px; }
     button {
       padding: 10px 28px;
       font-size: 0.95rem;
       font-weight: 600;
-      background: #7eb8f7;
-      color: #1a1a2e;
+      background: #08f7fa;
+      color: #130f32;
       border: none;
       border-radius: 6px;
       cursor: pointer;
@@ -47,8 +47,8 @@
     button:not(:disabled):hover { opacity: 0.85; }
     #restart-btn {
       background: transparent;
-      color: #888;
-      border: 1px solid #444;
+      color: #8090b0;
+      border: 1px solid #2a3560;
       padding: 6px 18px;
       font-size: 0.8rem;
     }
@@ -59,15 +59,15 @@
       overflow-y: auto;
       font-size: 0.75rem;
       font-family: 'Courier New', monospace;
-      color: #7fb97f;
-      background: #0d0d1a;
+      color: #08f7fa;
+      background: #0a0f25;
       border-radius: 4px;
       padding: 8px;
     }
     .status-line { line-height: 1.5; }
     #stream-status {
       font-size: 0.8rem;
-      color: #f7c97e;
+      color: #f776f5;
     }
     #latency-clock {
       position: fixed;
@@ -86,15 +86,15 @@
     }
     #latency-toggle, #capture-latency-btn {
       background: transparent;
-      color: #888;
-      border: 1px solid #444;
+      color: #8090b0;
+      border: 1px solid #2a3560;
       padding: 4px 14px;
       font-size: 0.75rem;
     }
   </style>
 </head>
 <body>
-  <h1>StreamBridge</h1>
+  <h1>WaitLess</h1>
 
   <div class="ip-block">
     <div class="ip-label">Enter this IP on Fire Stick</div>

@@ -1,4 +1,4 @@
-# StreamBridge
+# WaitLess
 
 Stream your Windows desktop to an Amazon Fire Stick over local WiFi. No cloud services, no relay servers, no new hardware. Measured latency is ~120-150ms glass-to-glass.
 
@@ -99,7 +99,7 @@ The APK is also at `client/app/build/outputs/apk/debug/app-debug.apk` if you pre
 ### 3. Connect
 
 1. On the host PC: click **Start Streaming** in the host app
-2. On the Fire Stick: open StreamBridge, enter the host's IP, press **Connect**
+2. On the Fire Stick: open WaitLess, enter the host's IP, press **Connect**
 3. The stream starts automatically once the Fire Stick connects to the signaling server
 
 ### Fire Stick controls
@@ -116,7 +116,7 @@ The APK is also at `client/app/build/outputs/apk/debug/app-debug.apk` if you pre
 ## Project Structure
 
 ```
-streambridge/
+waitless/
 ├── host/                        # Electron app — runs on the Windows PC
 │   ├── main.js                  # Main process: signaling server, streamer IPC, input relay
 │   ├── src/
@@ -131,7 +131,7 @@ streambridge/
 │       ├── signaling.test.js    # Integration tests for the signaling relay
 │       └── input.test.js        # Unit tests for input validation and replay
 └── client/                      # Android app — runs on the Fire Stick
-    └── app/src/main/java/com/streambridge/
+    └── app/src/main/java/com/waitless/
         ├── MainActivity.kt      # IP entry screen
         ├── StreamActivity.kt    # Fullscreen video render
         ├── SignalingClient.kt   # WebSocket signaling (OkHttp)
@@ -163,7 +163,7 @@ cd client
 
 ### Measuring latency
 
-Set `STREAMBRIDGE_DEBUG=1` before launching the host to enable the built-in latency clock and capture tools. The clock displays milliseconds on screen (visible in the stream); compare host vs Fire Stick values. Alternatively, film both screens with a phone camera and count the frame offset (~16.7ms per frame at 60fps).
+Set `WAITLESS_DEBUG=1` before launching the host to enable the built-in latency clock and capture tools. The clock displays milliseconds on screen (visible in the stream); compare host vs Fire Stick values. Alternatively, film both screens with a phone camera and count the frame offset (~16.7ms per frame at 60fps).
 
 ---
 

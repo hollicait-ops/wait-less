@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.StreamBridge" parent="@android:style/Theme.NoTitleBar.Fullscreen">
-        <item name="android:windowBackground">@android:color/black</item>
+    <style name="Theme.WaitLess" parent="@android:style/Theme.NoTitleBar.Fullscreen">
+        <item name="android:windowBackground">#130F32</item>
     </style>
 </resources>

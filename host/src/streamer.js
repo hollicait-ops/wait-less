@@ -16,7 +16,7 @@ const dgram = require('dgram');
 
 const VIDEO_PORT = 9000;
 const INPUT_PORT = 9001;
-const DEBUG_MODE = process.env.STREAMBRIDGE_DEBUG === '1';
+const DEBUG_MODE = process.env.WAITLESS_DEBUG === '1';
 const MAX_PAYLOAD = 1392; // 1500 MTU - 20 IP - 8 UDP - 8 frame header = 1464, conservative 1392
 const HEADER_SIZE = 8;
 
