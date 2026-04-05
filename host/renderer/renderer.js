@@ -108,4 +108,35 @@ startBtn.addEventListener('click', async () => {
 
 restartBtn.addEventListener('click', () => streambridge.restart());
 
+// --- Latency clock ---
+// Shows a running seconds.milliseconds counter captured by gdigrab.
+// Compare the value on the Fire Stick screen vs the laptop screen to
+// read glass-to-glass latency directly (difference in ms).
+const latencyClock = document.getElementById('latency-clock');
+const latencyToggle = document.getElementById('latency-toggle');
+let clockRunning = false;
+let clockRaf = null;
+
+function tickClock() {
+  const t = performance.now();
+  const secs = Math.floor(t / 1000) % 10000;
+  const ms = Math.floor(t % 1000);
+  latencyClock.textContent = `${String(secs).padStart(4, '0')}.${String(ms).padStart(3, '0')}`;
+  clockRaf = requestAnimationFrame(tickClock);
+}
+
+latencyToggle.addEventListener('click', () => {
+  clockRunning = !clockRunning;
+  if (clockRunning) {
+    latencyClock.style.display = 'block';
+    latencyToggle.textContent = 'Hide clock';
+    tickClock();
+  } else {
+    latencyClock.style.display = 'none';
+    latencyToggle.textContent = 'Latency clock';
+    cancelAnimationFrame(clockRaf);
+    clockRaf = null;
+  }
+});
+
 init();

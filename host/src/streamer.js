@@ -60,12 +60,15 @@ function startStreamer({ clientIp, videoPort = VIDEO_PORT, inputPort = INPUT_POR
   inputSocket.bind(inputPort, () => onLog(`[udp-input] listening on port ${inputPort}`));
 
   // FFmpeg command: gdigrab → H.264 baseline → Annex B on stdout
-  // -tune zerolatency: disables lookahead, rc-lookahead, and sliced threads,
-  //   so each frame is flushed to output immediately.
-  // keyint=60:min-keyint=60:scenecut=0: IDR every 60 frames (1 s at 60 fps),
-  //   no scene-cut detection so frag_count is predictable.
-  // bframes=0: no B-frames — baseline profile enforces this but explicit.
+  // -tune zerolatency enables sliced-threads (intra-frame parallelism with
+  //   zero inter-frame delay), rc-lookahead=0, sync-lookahead=0, and no mbtree.
+  //   Do NOT override sliced-threads=0 — that falls back to frame-level threading
+  //   which adds ~threads*16ms of pipeline latency.
+  // -fflags nobuffer: skip input buffering on the demuxer side.
+  // -flush_packets 1: flush each muxer packet to stdout immediately.
   const ffmpegArgs = [
+    '-fflags', 'nobuffer',
+    '-thread_queue_size', '2',
     '-f', 'gdigrab',
     '-framerate', '60',
     '-i', 'desktop',
@@ -88,7 +91,15 @@ function startStreamer({ clientIp, videoPort = VIDEO_PORT, inputPort = INPUT_POR
     // alternating slightly above/below neutral chroma (128), which renders as
     // alternating magenta/green bands. A small negative offset gives UV channels
     // more bitrate at minimal overall cost.
-    '-x264-params', 'keyint=30:min-keyint=30:scenecut=0:bframes=0:sliced-threads=0:chroma-qp-offset=-4',
+    // aud=1: emit an Access Unit Delimiter NAL (type 9) before each frame so the
+    // NAL parser can flush immediately on the AUD rather than waiting for the next
+    // frame's first slice to arrive and be parsed (~one encode cycle earlier).
+    // keyint=30: IDR every 30 frames (0.5s at 60fps) for fast recovery from loss.
+    // slices=4: 4-way intra-frame parallelism (used by -tune zerolatency's
+    //   sliced-threads mode). More slices = more parallelism but more boundary
+    //   artifacts; 4 is a good balance.
+    '-x264-params', 'keyint=30:min-keyint=30:scenecut=0:bframes=0:slices=4:chroma-qp-offset=-4:aud=1',
+    '-flush_packets', '1',
     '-f', 'h264',
     'pipe:1',
   ];
@@ -138,16 +149,12 @@ function stopStreamer() {
 // NAL parser — buffers Annex B chunks, emits one complete frame at a time
 // ---------------------------------------------------------------------------
 
-// H.264 NAL unit types relevant for frame boundary detection
-const NAL_IDR_SLICE = 5;
-const NAL_NON_IDR_SLICE = 1;
+const NAL_AUD = 9; // Access Unit Delimiter
 
 function createNalParser(onFrame) {
   let buf = Buffer.alloc(0);
-  // Accumulated NALs for the current frame (as raw NAL bodies, no start code)
+  // Accumulated NAL bodies for the current frame (no start codes)
   let frameNals = [];
-  // Whether the current accumulated frame contains a slice NAL
-  let frameHasSlice = false;
 
   function findStartCode(b, from) {
     for (let i = from; i < b.length - 3; i++) {
@@ -163,21 +170,12 @@ function createNalParser(onFrame) {
     return nalBody.length > 0 ? (nalBody[0] & 0x1f) : 0;
   }
 
-  // Check if a VCL NAL is the first slice of a new access unit.
-  // first_mb_in_slice is the first exp-golomb value in the slice header;
-  // when it's 0 the exp-golomb encoding is a single '1' bit, so the MSB
-  // of the first RBSP byte (nalBody[1]) is set.
-  function isFirstSliceInFrame(nalBody) {
-    return nalBody.length >= 2 && (nalBody[1] & 0x80) !== 0;
-  }
-
   function flushFrame() {
     if (frameNals.length === 0) return;
     // Rebuild as Annex B: 00 00 00 01 + nal body for each NAL
     const parts = frameNals.map(nal => Buffer.concat([Buffer.from([0, 0, 0, 1]), nal]));
     onFrame(Buffer.concat(parts));
     frameNals = [];
-    frameHasSlice = false;
   }
 
   return {
@@ -192,7 +190,6 @@ function createNalParser(onFrame) {
         const nalBodyStart = sc.pos + sc.scLen;
         const next = findStartCode(buf, nalBodyStart + 1);
         if (!next) {
-          // Keep from sc.pos onwards for the next push
           buf = buf.slice(sc.pos);
           return;
         }
@@ -200,23 +197,15 @@ function createNalParser(onFrame) {
         const nalBody = buf.slice(nalBodyStart, next.pos);
         const type = nalUnitType(nalBody);
 
-        // A new access unit starts when we see a VCL NAL with first_mb_in_slice == 0
-        // (i.e. the first slice of a new frame). Continuation slices (first_mb != 0)
-        // belong to the current frame and must NOT trigger a flush.
-        if ((type === NAL_NON_IDR_SLICE || type === NAL_IDR_SLICE) && frameHasSlice && isFirstSliceInFrame(nalBody)) {
-          const carryOver = [];
-          while (frameNals.length > 0) {
-            const lastType = nalUnitType(frameNals[frameNals.length - 1]);
-            if (lastType === NAL_NON_IDR_SLICE || lastType === NAL_IDR_SLICE) break;
-            carryOver.unshift(frameNals.pop());
-          }
+        if (type === NAL_AUD) {
+          // AUD (type 9) is emitted by the encoder at the very start of each new
+          // access unit, before any slice data for that frame is written. Flushing
+          // here means we ship frame N as soon as frame N+1's encoding begins,
+          // saving ~one encode cycle vs waiting for the next frame's first slice.
+          // The AUD itself carries no picture data and is not forwarded.
           flushFrame();
-          frameNals.push(...carryOver);
-        }
-
-        frameNals.push(nalBody);
-        if (type === NAL_NON_IDR_SLICE || type === NAL_IDR_SLICE) {
-          frameHasSlice = true;
+        } else {
+          frameNals.push(nalBody);
         }
 
         buf = buf.slice(next.pos);

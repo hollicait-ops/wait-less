@@ -33,7 +33,7 @@ class UdpVideoReceiver(
         private const val MAX_PACKET = 1500
         private const val HEADER_SIZE = 8
         // Frames queued between reassembly and MediaCodec input thread
-        private const val FRAME_QUEUE_CAPACITY = 8
+        private const val FRAME_QUEUE_CAPACITY = 4
         // Stale frame cleanup: if frame_id gap grows beyond this, drop old partials
         private const val MAX_PENDING_FRAMES = 4
     }
