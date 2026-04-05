@@ -38,8 +38,11 @@ class UdpVideoReceiver(
         private const val MAX_PENDING_FRAMES = 4
     }
 
+    /** Frame data with a timestamp from when reassembly completed. */
+    private data class TimedFrame(val data: ByteArray, val reassembledAtNs: Long)
+
     // Reassembled Annex B frames ready for MediaCodec
-    private val frameQueue = ArrayBlockingQueue<ByteArray>(FRAME_QUEUE_CAPACITY)
+    private val frameQueue = ArrayBlockingQueue<TimedFrame>(FRAME_QUEUE_CAPACITY)
 
     private var receiveThread: Thread? = null
     private var codecThread: Thread? = null
@@ -168,10 +171,12 @@ class UdpVideoReceiver(
                     Log.i(TAG, "First IDR keyframe assembled (frame $frameId, ${frame.size} bytes)")
                 }
 
+                val timedFrame = TimedFrame(frame, System.nanoTime())
+
                 // Drop oldest rather than block if the codec is behind
-                if (!frameQueue.offer(frame)) {
+                if (!frameQueue.offer(timedFrame)) {
                     frameQueue.poll()
-                    frameQueue.offer(frame)
+                    frameQueue.offer(timedFrame)
                 }
             }
 
@@ -208,16 +213,22 @@ class UdpVideoReceiver(
         val mc = codec ?: return
         var frameCount = 0
         while (running) {
-            val frame = try {
+            val timedFrame = try {
                 frameQueue.take()
             } catch (e: InterruptedException) {
                 break
             }
+            val dequeuedAtNs = System.nanoTime()
+            val queueWaitMs = (dequeuedAtNs - timedFrame.reassembledAtNs) / 1_000_000.0
             frameCount++
             if (frameCount <= 3) {
-                Log.i(TAG, "Frame #$frameCount: ${frame.size} bytes NALs=[${describeAnnexBNalTypes(frame)}]")
+                Log.i(TAG, "Frame #$frameCount: ${timedFrame.data.size} bytes NALs=[${describeAnnexBNalTypes(timedFrame.data)}]")
             }
-            if (!feedAnnexBFrame(mc, frame)) break
+            if (frameCount <= 10 || frameCount % 60 == 0) {
+                Log.i(TAG, "[latency] frame#$frameCount queueWait=${String.format("%.1f", queueWaitMs)}ms")
+            }
+            // Use reassembly timestamp as PTS so drainLoop can measure decode time
+            if (!feedAnnexBFrame(mc, timedFrame.data, dequeuedAtNs)) break
         }
     }
 
@@ -227,17 +238,18 @@ class UdpVideoReceiver(
      * explicit CSD initialisation are satisfied. All remaining NAL units (slices,
      * SEI, etc.) are concatenated and submitted as a single regular input buffer.
      */
-    private fun feedAnnexBFrame(mc: MediaCodec, data: ByteArray): Boolean {
+    private fun feedAnnexBFrame(mc: MediaCodec, data: ByteArray, feedAtNs: Long): Boolean {
         val nals = splitAnnexB(data)
 
         // Send SPS/PPS as codec-config buffers
         for ((nalType, nalData) in nals) {
             if (nalType == 7 || nalType == 8) {
-                if (!feedBuffer(mc, nalData, MediaCodec.BUFFER_FLAG_CODEC_CONFIG)) return false
+                if (!feedBuffer(mc, nalData, MediaCodec.BUFFER_FLAG_CODEC_CONFIG, 0L)) return false
             }
         }
 
-        // Send remaining NALs (slices, SEI, AUD…) as a single regular buffer
+        // Send remaining NALs (slices, SEI, AUD...) as a single regular buffer.
+        // Use feedAtNs as PTS so drainLoop can measure decode latency.
         val sliceNals = nals.filter { (t, _) -> t != 7 && t != 8 }
         if (sliceNals.isNotEmpty()) {
             val combined = ByteArray(sliceNals.sumOf { it.second.size })
@@ -246,7 +258,7 @@ class UdpVideoReceiver(
                 nalData.copyInto(combined, pos)
                 pos += nalData.size
             }
-            if (!feedBuffer(mc, combined, 0)) return false
+            if (!feedBuffer(mc, combined, 0, feedAtNs / 1000L)) return false
         }
         return true
     }
@@ -308,10 +320,14 @@ class UdpVideoReceiver(
             }
             when {
                 outputIdx >= 0 -> {
+                    val decodedAtNs = System.nanoTime()
                     mc.releaseOutputBuffer(outputIdx, true) // render to Surface
                     framesRendered++
-                    if (framesRendered <= 5 || framesRendered % 60 == 0) {
-                        Log.i(TAG, "Released frame #$framesRendered to Surface (pts=${info.presentationTimeUs})")
+                    // PTS carries the feedAtNs timestamp (in microseconds)
+                    val feedAtNs = info.presentationTimeUs * 1000L
+                    val decodeMs = if (feedAtNs > 0) (decodedAtNs - feedAtNs) / 1_000_000.0 else -1.0
+                    if (framesRendered <= 10 || framesRendered % 60 == 0) {
+                        Log.i(TAG, "[latency] frame#$framesRendered decode=${String.format("%.1f", decodeMs)}ms")
                     }
                 }
                 outputIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
@@ -322,8 +338,8 @@ class UdpVideoReceiver(
         }
     }
 
-    /** Queues [data] to the codec with the given [flags]. Returns false on fatal error. */
-    private fun feedBuffer(mc: MediaCodec, data: ByteArray, flags: Int): Boolean {
+    /** Queues [data] to the codec with the given [flags] and [ptsUs]. Returns false on fatal error. */
+    private fun feedBuffer(mc: MediaCodec, data: ByteArray, flags: Int, ptsUs: Long): Boolean {
         val inputIdx = try {
             mc.dequeueInputBuffer(10_000L) // 10 ms timeout
         } catch (e: Exception) {
@@ -336,7 +352,7 @@ class UdpVideoReceiver(
         val written = minOf(data.size, inputBuf.capacity())
         inputBuf.clear()
         inputBuf.put(data, 0, written)
-        mc.queueInputBuffer(inputIdx, 0, written, System.nanoTime() / 1000L, flags)
+        mc.queueInputBuffer(inputIdx, 0, written, ptsUs, flags)
         return true
     }
 

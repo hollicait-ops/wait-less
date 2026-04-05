@@ -187,11 +187,36 @@ function startStreamer({ clientIp, videoPort = VIDEO_PORT, inputPort = INPUT_POR
     ffmpeg = null;
   });
 
+  let hostFrameCount = 0;
+  let lastChunkTime = 0;
+  let lastFlushTime = 0;
+
   const parser = createNalParser((frameData) => {
+    const sendStart = performance.now();
     sendFrame(frameData, clientIp, videoPort);
+    const sendEnd = performance.now();
+    hostFrameCount++;
+
+    if (hostFrameCount <= 10 || hostFrameCount % 60 === 0) {
+      const flushGap = lastFlushTime > 0 ? (sendStart - lastFlushTime).toFixed(1) : '-';
+      const sendMs = (sendEnd - sendStart).toFixed(1);
+      const fragCount = Math.ceil(frameData.length / MAX_PAYLOAD);
+      onLog(`[latency] host frame#${hostFrameCount}: size=${frameData.length} frags=${fragCount} flushGap=${flushGap}ms send=${sendMs}ms`);
+    }
+    lastFlushTime = sendEnd;
   });
 
-  ffmpeg.stdout.on('data', (chunk) => parser.push(chunk));
+  ffmpeg.stdout.on('data', (chunk) => {
+    const now = performance.now();
+    if (hostFrameCount <= 10 || hostFrameCount % 60 === 0) {
+      const chunkGap = lastChunkTime > 0 ? (now - lastChunkTime).toFixed(1) : '-';
+      if (hostFrameCount <= 10) {
+        onLog(`[latency] ffmpeg chunk: ${chunk.length} bytes, gap=${chunkGap}ms`);
+      }
+    }
+    lastChunkTime = now;
+    parser.push(chunk);
+  });
 
   onLog(`[streamer] started — streaming to ${clientIp}:${videoPort}`);
 }
