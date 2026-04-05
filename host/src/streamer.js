@@ -11,7 +11,7 @@
 //
 // Input events are received on INPUT_PORT as UTF-8 JSON datagrams.
 
-const { spawn, exec } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const dgram = require('dgram');
 
 const VIDEO_PORT = 9000;
@@ -30,23 +30,21 @@ let detectedEncoder = null;
 /**
  * Detect the best available H.264 encoder by probing FFmpeg.
  * Prefers h264_nvenc (NVIDIA GPU) for lower latency, falls back to libx264.
- * Call warmupEncoder() at startup so the result is cached before streaming starts.
+ * Uses execSync (~50ms) and caches the result for subsequent calls.
  */
 function detectEncoder() {
-  return detectedEncoder || 'libx264';
-}
-
-function warmupEncoder() {
-  return new Promise((resolve) => {
-    exec('ffmpeg -encoders -hide_banner', { encoding: 'utf8', timeout: 5000 }, (err, stdout) => {
-      if (!err && stdout.includes('h264_nvenc')) {
-        detectedEncoder = 'h264_nvenc';
-      } else {
-        detectedEncoder = 'libx264';
-      }
-      resolve(detectedEncoder);
-    });
-  });
+  if (detectedEncoder) return detectedEncoder;
+  try {
+    const output = execSync('ffmpeg -encoders -hide_banner 2>&1', { encoding: 'utf8', timeout: 5000 });
+    if (output.includes('h264_nvenc')) {
+      detectedEncoder = 'h264_nvenc';
+    } else {
+      detectedEncoder = 'libx264';
+    }
+  } catch {
+    detectedEncoder = 'libx264';
+  }
+  return detectedEncoder;
 }
 
 /**
@@ -311,4 +309,4 @@ function sendFrame(frameData, ip, port) {
   }
 }
 
-module.exports = { startStreamer, stopStreamer, warmupEncoder, VIDEO_PORT, INPUT_PORT };
+module.exports = { startStreamer, stopStreamer, VIDEO_PORT, INPUT_PORT };

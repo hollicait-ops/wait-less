@@ -5,7 +5,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const { createSignalingServer } = require('./src/signaling');
 const { replayInputEvent } = require('./src/input');
-const { startStreamer, stopStreamer, warmupEncoder, VIDEO_PORT, INPUT_PORT } = require('./src/streamer');
+const { startStreamer, stopStreamer, VIDEO_PORT, INPUT_PORT } = require('./src/streamer');
 
 const SIGNALING_PORT = 8080;
 
@@ -174,7 +174,6 @@ ipcMain.handle('restart', () => { app.relaunch(); app.exit(0); });
 
 app.whenReady().then(() => {
   loadRobotjs();
-  warmupEncoder().then((enc) => console.log('[main] encoder detected:', enc));
   startSignalingServer();
   createWindow();
 });
