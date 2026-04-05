@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">StreamBridge</string>
+    <string name="app_name">WaitLess</string>
     <string name="hint_host_ip">Host IP (e.g. 192.168.1.42)</string>
     <string name="btn_connect">Connect</string>
     <string name="status_connecting">Connecting…</string>

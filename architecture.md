@@ -1,4 +1,4 @@
-# StreamBridge — Architecture
+# WaitLess — Architecture
 
 ## Goal
 
@@ -204,6 +204,6 @@ This is a LAN-only tool. There is no authentication beyond knowing the host's IP
 - **DXGI capture (ddagrab):** Would reduce capture latency from ~130ms to ~1-2ms, but requires D3D11-to-CUDA interop not currently supported (BUG-37)
 - **Adaptive bitrate:** Reduce bitrate on packet loss detection; expose bitrate in HUD
 - **Multi-monitor support:** Let user pick which display to stream from the host UI
-- **mDNS discovery:** Eliminate IP entry -- host advertises `_streambridge._tcp.local`, Fire Stick discovers it automatically
+- **mDNS discovery:** Eliminate IP entry -- host advertises `_waitless._tcp.local`, Fire Stick discovers it automatically
 - **PIN authentication:** 4-digit PIN shown on host, entered on Fire Stick to authorize connection
 - **Wake-on-LAN:** Fire Stick app sends WOL packet to wake the host before connecting

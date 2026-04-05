@@ -8,7 +8,7 @@ const { replayInputEvent } = require('./src/input');
 const { startStreamer, stopStreamer, VIDEO_PORT, INPUT_PORT } = require('./src/streamer');
 
 const SIGNALING_PORT = 8080;
-const DEBUG_MODE = process.env.STREAMBRIDGE_DEBUG === '1';
+const DEBUG_MODE = process.env.WAITLESS_DEBUG === '1';
 
 let mainWindow = null;
 let signalingServer = null;
@@ -41,7 +41,8 @@ function createWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, 'renderer', 'preload.js'),
     },
-    title: 'StreamBridge',
+    title: 'WaitLess',
+    icon: path.join(__dirname, 'icon.png'),
   });
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));

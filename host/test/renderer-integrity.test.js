@@ -53,7 +53,7 @@ test('renderer scripts do not redeclare names exposed by contextBridge', () => {
     'utf8',
   );
 
-  // Extract every name passed to exposeInMainWorld, e.g. exposeInMainWorld('streambridge', ...)
+  // Extract every name passed to exposeInMainWorld, e.g. exposeInMainWorld('waitless', ...)
   const exposed = [...preloadSrc.matchAll(/exposeInMainWorld\(\s*['"](\w+)['"]/g)]
     .map(m => m[1]);
 

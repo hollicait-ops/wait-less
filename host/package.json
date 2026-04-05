@@ -1,7 +1,7 @@
 {
-  "name": "streambridge-host",
+  "name": "waitless-host",
   "version": "0.1.0",
-  "description": "StreamBridge host — screen capture and streaming to Fire Stick",
+  "description": "WaitLess host — screen capture and streaming to Fire Stick",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -20,8 +20,8 @@
     "eslint": "^8.57.1"
   },
   "build": {
-    "appId": "com.streambridge.host",
-    "productName": "StreamBridge",
+    "appId": "com.waitless.host",
+    "productName": "WaitLess",
     "win": {
       "target": "nsis"
     },

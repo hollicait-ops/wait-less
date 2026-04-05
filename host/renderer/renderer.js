@@ -21,12 +21,12 @@ function logStatus(msg) {
 
 // --- Init: display local IP ---
 async function init() {
-  const ip = await streambridge.getLocalIP();
-  const port = await streambridge.getSignalingPort();
+  const ip = await waitless.getLocalIP();
+  const port = await waitless.getSignalingPort();
   ipDisplay.textContent = ip;
   portDisplay.textContent = port;
 
-  streambridge.onSignalingStatus((msg) => logStatus(msg));
+  waitless.onSignalingStatus((msg) => logStatus(msg));
 }
 
 // --- Signaling WebSocket ---
@@ -66,14 +66,14 @@ async function handleSignalingMessage(msg) {
   if (msg.type === 'peer-left') {
     logStatus('Client disconnected — stopping streamer');
     streamStatus.textContent = 'Waiting for client...';
-    await streambridge.stopStreamer();
+    await waitless.stopStreamer();
     return;
   }
 
   if (msg.type === 'peer-joined') {
     // Send stream-info so the client can bind its UDP socket,
     // but don't start FFmpeg yet — wait for client-ready.
-    const ports = await streambridge.getStreamPorts();
+    const ports = await waitless.getStreamPorts();
     sendSignaling({ type: 'stream-info', videoPort: ports.videoPort, inputPort: ports.inputPort });
     logStatus('Client joined — sent stream-info, waiting for client-ready...');
     streamStatus.textContent = 'Waiting for client receiver...';
@@ -82,7 +82,7 @@ async function handleSignalingMessage(msg) {
 
   if (msg.type === 'client-ready') {
     logStatus('Client ready — starting streamer...');
-    const result = await streambridge.startStreamer();
+    const result = await waitless.startStreamer();
     if (!result.ok) {
       logStatus(`Failed to start streamer: ${result.error}`);
       return;
@@ -101,16 +101,16 @@ function sendSignaling(data) {
 // --- Start button ---
 startBtn.addEventListener('click', async () => {
   startBtn.disabled = true;
-  const port = await streambridge.getSignalingPort();
+  const port = await waitless.getSignalingPort();
   connectSignaling(port);
   logStatus('Waiting for Fire Stick to connect...');
 });
 
-restartBtn.addEventListener('click', () => streambridge.restart());
+restartBtn.addEventListener('click', () => waitless.restart());
 
-// --- Debug tools (hidden unless STREAMBRIDGE_DEBUG=1) ---
+// --- Debug tools (hidden unless WAITLESS_DEBUG=1) ---
 async function initDebugTools() {
-  const debug = await streambridge.isDebug();
+  const debug = await waitless.isDebug();
   if (!debug) return;
 
   const latencyClock = document.getElementById('latency-clock');
@@ -149,7 +149,7 @@ async function initDebugTools() {
     captureLatencyBtn.disabled = true;
     captureLatencyBtn.textContent = 'Capturing...';
     try {
-      const result = await streambridge.captureLatency();
+      const result = await waitless.captureLatency();
       if (result.error) {
         logStatus(`Latency capture failed: ${result.error}`);
       } else {

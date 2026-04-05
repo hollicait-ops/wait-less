@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('streambridge', {
+contextBridge.exposeInMainWorld('waitless', {
   getLocalIP: () => ipcRenderer.invoke('get-local-ip'),
   getSignalingPort: () => ipcRenderer.invoke('get-signaling-port'),
   onSignalingStatus: (cb) => {

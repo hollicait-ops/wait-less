@@ -1,4 +1,4 @@
-// receiver.js — WebRTC answerer for the StreamBridge test receiver page
+// receiver.js — WebRTC answerer for the WaitLess test receiver page
 // Open localhost:3000 in Chrome while the Electron host is running.
 
 const SIGNALING_URL = 'ws://localhost:8080';
