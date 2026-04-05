@@ -351,6 +351,8 @@ class UdpVideoReceiver(
             // CSD (codec-specific data / SPS+PPS) is embedded inline in the Annex B
             // stream by FFmpeg, so we don't provide KEY_CSD_0/KEY_CSD_1 here.
             it.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 512 * 1024)
+            // Hint the decoder to minimize output buffering for lower latency.
+            it.setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
         }
         val mc = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
         mc.configure(format, surface, null, 0)
