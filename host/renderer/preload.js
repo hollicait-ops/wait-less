@@ -12,4 +12,5 @@ contextBridge.exposeInMainWorld('streambridge', {
   startStreamer: () => ipcRenderer.invoke('start-streamer'),
   stopStreamer: () => ipcRenderer.invoke('stop-streamer'),
   restart: () => ipcRenderer.invoke('restart'),
+  captureLatency: () => ipcRenderer.invoke('capture-latency'),
 });

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, desktopCapturer, ipcMain, screen } = require('electron');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -113,6 +113,54 @@ function takeFireStickScreenshot(delayMs = 3000) {
     adb.on('error', (err) => console.warn('[screenshot] adb error:', err.message));
   }, delayMs);
 }
+
+// Capture both screens simultaneously for latency measurement.
+// Kicks off local desktopCapturer + adb screencap in parallel,
+// saving timestamped PNGs to the system temp dir for side-by-side comparison.
+ipcMain.handle('capture-latency', async () => {
+  const tmpDir = app.getPath('temp');
+  const timestamp = Date.now();
+  const localDest = path.join(tmpDir, `latency_laptop_${timestamp}.png`);
+  const remoteDest = path.join(tmpDir, `latency_firestick_${timestamp}.png`);
+
+  // Start both captures concurrently
+  const localPromise = desktopCapturer.getSources({
+    types: ['screen'],
+    thumbnailSize: { width: 1920, height: 1200 },
+  }).then((sources) => {
+    const src = sources[0];
+    if (src) {
+      fs.writeFileSync(localDest, src.thumbnail.toPNG());
+      console.log('[latency] laptop screenshot saved:', localDest);
+    }
+  }).catch((err) => {
+    console.warn('[latency] laptop capture failed:', err.message);
+  });
+
+  const adbPromise = new Promise((resolve) => {
+    const adb = spawn('adb', ['exec-out', 'screencap', '-p']);
+    const chunks = [];
+    adb.stdout.on('data', (chunk) => chunks.push(chunk));
+    adb.on('close', (code) => {
+      if (code === 0 && chunks.length > 0) {
+        fs.writeFileSync(remoteDest, Buffer.concat(chunks));
+        console.log('[latency] firestick screenshot saved:', remoteDest);
+        resolve({ ok: true });
+      } else {
+        resolve({ ok: false, error: `adb exited with code ${code}` });
+      }
+    });
+    adb.on('error', (err) => resolve({ ok: false, error: err.message }));
+  });
+
+  const [, adbResult] = await Promise.all([localPromise, adbPromise]);
+
+  return {
+    laptop: localDest,
+    firestick: adbResult.ok ? remoteDest : null,
+    error: adbResult.ok ? null : adbResult.error,
+  };
+});
 
 ipcMain.handle('stop-streamer', () => {
   stopStreamer();
