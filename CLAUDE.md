@@ -1,6 +1,8 @@
 # StreamBridge — Claude Code Instructions
 
-StreamBridge is a low-latency wireless screen streaming app. It streams the Windows laptop display and audio to a Fire Stick over a local WiFi network, targeting <60ms glass-to-glass latency. The architecture mirrors Steam Link: a host process on the laptop captures, encodes, and streams; a native Android app on the Fire Stick decodes and renders.
+StreamBridge is a low-latency wireless screen streaming app. It streams the Windows host PC display and audio to a Fire Stick over a local WiFi network. Measured glass-to-glass latency is ~120-150ms. The architecture mirrors Steam Link: a host process on the PC captures, encodes, and streams; a native Android app on the Fire Stick decodes and renders.
+
+**Latency budget (measured):** ~130ms gdigrab capture, ~7ms client decode, ~5ms WiFi/UDP. The gdigrab GDI capture is the dominant bottleneck; DXGI (ddagrab) would reduce this but requires D3D11-to-CUDA interop not currently available.
 
 ---
 
@@ -13,7 +15,7 @@ streambridge/
 ├── .claude/
 │   └── agents/
 │       └── validate-setup.md  # Sub-agent: validates dev environment
-├── host/                      # Electron app — runs on Windows laptop
+├── host/                      # Electron app — runs on Windows host PC
 │   ├── package.json
 │   ├── main.js                # Main process: signaling server + app lifecycle
 │   ├── src/
@@ -89,7 +91,9 @@ Enable ADB on Fire Stick: Settings → My Fire TV → Developer Options → ADB 
 
 ### Testing Latency
 
-Use a stopwatch displayed on the laptop screen and film both screens simultaneously with a phone camera. Count frames between the stopwatch on the laptop vs. the Fire Stick to measure real glass-to-glass latency.
+The Electron UI has a built-in latency clock and dual-screen capture tool (hidden by default). Enable with `STREAMBRIDGE_DEBUG=1` environment variable before launching. The clock displays milliseconds on screen (captured by gdigrab into the stream); compare host vs Fire Stick values for glass-to-glass latency. The "Capture latency" button takes simultaneous screenshots of both screens, but adb timing variance makes phone-camera comparison more accurate for precise measurements.
+
+Pipeline instrumentation logging (queue wait, decode time, chunk gaps) is also gated behind debug mode. Check Electron status log and `adb logcat -s UdpVideoReceiver:V` for `[latency]` entries.
 
 ---
 
@@ -127,4 +131,4 @@ Use a stopwatch displayed on the laptop screen and film both screens simultaneou
 - Android Studio (for client builds) or just the Android SDK + Gradle
 - `adb` on PATH
 - Fire Stick with ADB debugging enabled (see above)
-- Both laptop and Fire Stick on the same WiFi network (5GHz preferred)
+- Both host PC and Fire Stick on the same WiFi network (5GHz preferred)
