@@ -139,4 +139,23 @@ latencyToggle.addEventListener('click', () => {
   }
 });
 
+// --- Latency capture ---
+const captureLatencyBtn = document.getElementById('capture-latency-btn');
+captureLatencyBtn.addEventListener('click', async () => {
+  captureLatencyBtn.disabled = true;
+  captureLatencyBtn.textContent = 'Capturing...';
+  try {
+    const result = await streambridge.captureLatency();
+    if (result.error) {
+      logStatus(`Latency capture failed: ${result.error}`);
+    } else {
+      logStatus(`Latency screenshots saved — laptop: ${result.laptop}, firestick: ${result.firestick}`);
+    }
+  } catch (err) {
+    logStatus(`Latency capture error: ${err.message}`);
+  }
+  captureLatencyBtn.disabled = false;
+  captureLatencyBtn.textContent = 'Capture latency';
+});
+
 init();

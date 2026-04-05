@@ -63,23 +63,25 @@ function buildEncoderArgs(encoder) {
 
   if (encoder === 'h264_nvenc') {
     // NVENC hardware encoder — ~2ms encode latency, no frame pipeline.
-    // -preset p1: fastest NVENC preset (was "llhp" in older drivers).
+    // -preset p1: fastest NVENC preset.
     // -tune ull: ultra-low-latency mode — disables B-frames, lookahead, etc.
-    // -rc cbr: constant bitrate for predictable packet sizes.
-    // -cbr true: enforce CBR (NVENC-specific).
-    // -b:v 15M: 15 Mbps target — enough for 1080p60 without starving dark areas.
-    // -aud 1: emit Access Unit Delimiter NALs (same as libx264 aud=1).
+    // -delay 0: zero output delay — NVENC defaults to INT_MAX which buffers
+    //   many frames before emitting output, adding massive latency.
+    // -zerolatency 1: no reordering delay (NVENC-specific flag, separate from -tune).
+    // -rc cbr -b:v 15M: constant 15 Mbps for predictable packet sizes.
+    // -aud 1: emit Access Unit Delimiter NALs for immediate parser flush.
     // -forced-idr 1 + -g 30: IDR every 30 frames for loss recovery.
     return [
       '-c:v', 'h264_nvenc',
       '-preset', 'p1',
       '-tune', 'ull',
       '-profile:v', 'baseline',
-      '-level', '4.1',
       '-pix_fmt', 'yuv420p',
       ...colorArgs,
       '-rc', 'cbr',
       '-b:v', '15M',
+      '-delay', '0',
+      '-zerolatency', '1',
       '-g', '30',
       '-forced-idr', '1',
       '-aud', '1',
