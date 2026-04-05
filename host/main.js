@@ -8,6 +8,7 @@ const { replayInputEvent } = require('./src/input');
 const { startStreamer, stopStreamer, VIDEO_PORT, INPUT_PORT } = require('./src/streamer');
 
 const SIGNALING_PORT = 8080;
+const DEBUG_MODE = process.env.STREAMBRIDGE_DEBUG === '1';
 
 let mainWindow = null;
 let signalingServer = null;
@@ -120,7 +121,7 @@ function takeFireStickScreenshot(delayMs = 3000) {
 ipcMain.handle('capture-latency', async () => {
   const tmpDir = app.getPath('temp');
   const timestamp = Date.now();
-  const localDest = path.join(tmpDir, `latency_laptop_${timestamp}.png`);
+  const localDest = path.join(tmpDir, `latency_host_${timestamp}.png`);
   const remoteDest = path.join(tmpDir, `latency_firestick_${timestamp}.png`);
 
   // Start both captures concurrently
@@ -131,10 +132,10 @@ ipcMain.handle('capture-latency', async () => {
     const src = sources[0];
     if (src) {
       fs.writeFileSync(localDest, src.thumbnail.toPNG());
-      console.log('[latency] laptop screenshot saved:', localDest);
+      console.log('[latency] host screenshot saved:', localDest);
     }
   }).catch((err) => {
-    console.warn('[latency] laptop capture failed:', err.message);
+    console.warn('[latency] host capture failed:', err.message);
   });
 
   const adbPromise = new Promise((resolve) => {
@@ -156,7 +157,7 @@ ipcMain.handle('capture-latency', async () => {
   const [, adbResult] = await Promise.all([localPromise, adbPromise]);
 
   return {
-    laptop: localDest,
+    host: localDest,
     firestick: adbResult.ok ? remoteDest : null,
     error: adbResult.ok ? null : adbResult.error,
   };
@@ -167,6 +168,7 @@ ipcMain.handle('stop-streamer', () => {
   return { ok: true };
 });
 
+ipcMain.handle('is-debug', () => DEBUG_MODE);
 ipcMain.handle('get-local-ip', () => getLocalIP());
 ipcMain.handle('get-signaling-port', () => SIGNALING_PORT);
 ipcMain.handle('get-stream-ports', () => ({ videoPort: VIDEO_PORT, inputPort: INPUT_PORT }));

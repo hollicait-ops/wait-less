@@ -3,6 +3,7 @@ package com.streambridge
 import android.media.MediaCodec
 import android.media.MediaFormat
 import android.util.Log
+import com.streambridge.BuildConfig
 import android.view.Surface
 import org.json.JSONObject
 import java.net.DatagramPacket
@@ -211,6 +212,7 @@ class UdpVideoReceiver(
 
     private fun codecFeedLoop() {
         val mc = codec ?: return
+        val debug = BuildConfig.DEBUG
         var frameCount = 0
         while (running) {
             val timedFrame = try {
@@ -219,13 +221,15 @@ class UdpVideoReceiver(
                 break
             }
             val dequeuedAtNs = System.nanoTime()
-            val queueWaitMs = (dequeuedAtNs - timedFrame.reassembledAtNs) / 1_000_000.0
             frameCount++
-            if (frameCount <= 3) {
-                Log.i(TAG, "Frame #$frameCount: ${timedFrame.data.size} bytes NALs=[${describeAnnexBNalTypes(timedFrame.data)}]")
-            }
-            if (frameCount <= 10 || frameCount % 60 == 0) {
-                Log.i(TAG, "[latency] frame#$frameCount queueWait=${String.format("%.1f", queueWaitMs)}ms")
+            if (debug) {
+                val queueWaitMs = (dequeuedAtNs - timedFrame.reassembledAtNs) / 1_000_000.0
+                if (frameCount <= 3) {
+                    Log.i(TAG, "Frame #$frameCount: ${timedFrame.data.size} bytes NALs=[${describeAnnexBNalTypes(timedFrame.data)}]")
+                }
+                if (frameCount <= 10 || frameCount % 60 == 0) {
+                    Log.i(TAG, "[latency] frame#$frameCount queueWait=${String.format("%.1f", queueWaitMs)}ms")
+                }
             }
             // Use reassembly timestamp as PTS so drainLoop can measure decode time
             if (!feedAnnexBFrame(mc, timedFrame.data, dequeuedAtNs)) break
@@ -307,6 +311,7 @@ class UdpVideoReceiver(
 
     private fun drainLoop() {
         val mc = codec ?: return
+        val debug = BuildConfig.DEBUG
         val info = MediaCodec.BufferInfo()
         while (running) {
             val outputIdx = try {
@@ -320,13 +325,12 @@ class UdpVideoReceiver(
             }
             when {
                 outputIdx >= 0 -> {
-                    val decodedAtNs = System.nanoTime()
                     mc.releaseOutputBuffer(outputIdx, true) // render to Surface
                     framesRendered++
-                    // PTS carries the feedAtNs timestamp (in microseconds)
-                    val feedAtNs = info.presentationTimeUs * 1000L
-                    val decodeMs = if (feedAtNs > 0) (decodedAtNs - feedAtNs) / 1_000_000.0 else -1.0
-                    if (framesRendered <= 10 || framesRendered % 60 == 0) {
+                    if (debug && (framesRendered <= 10 || framesRendered % 60 == 0)) {
+                        val decodedAtNs = System.nanoTime()
+                        val feedAtNs = info.presentationTimeUs * 1000L
+                        val decodeMs = if (feedAtNs > 0) (decodedAtNs - feedAtNs) / 1_000_000.0 else -1.0
                         Log.i(TAG, "[latency] frame#$framesRendered decode=${String.format("%.1f", decodeMs)}ms")
                     }
                 }

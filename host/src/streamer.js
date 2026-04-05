@@ -16,6 +16,7 @@ const dgram = require('dgram');
 
 const VIDEO_PORT = 9000;
 const INPUT_PORT = 9001;
+const DEBUG_MODE = process.env.STREAMBRIDGE_DEBUG === '1';
 const MAX_PAYLOAD = 1392; // 1500 MTU - 20 IP - 8 UDP - 8 frame header = 1464, conservative 1392
 const HEADER_SIZE = 8;
 
@@ -192,29 +193,34 @@ function startStreamer({ clientIp, videoPort = VIDEO_PORT, inputPort = INPUT_POR
   let lastFlushTime = 0;
 
   const parser = createNalParser((frameData) => {
-    const sendStart = performance.now();
-    sendFrame(frameData, clientIp, videoPort);
-    const sendEnd = performance.now();
-    hostFrameCount++;
-
-    if (hostFrameCount <= 10 || hostFrameCount % 60 === 0) {
-      const flushGap = lastFlushTime > 0 ? (sendStart - lastFlushTime).toFixed(1) : '-';
-      const sendMs = (sendEnd - sendStart).toFixed(1);
-      const fragCount = Math.ceil(frameData.length / MAX_PAYLOAD);
-      onLog(`[latency] host frame#${hostFrameCount}: size=${frameData.length} frags=${fragCount} flushGap=${flushGap}ms send=${sendMs}ms`);
+    if (DEBUG_MODE) {
+      const sendStart = performance.now();
+      sendFrame(frameData, clientIp, videoPort);
+      const sendEnd = performance.now();
+      hostFrameCount++;
+      if (hostFrameCount <= 10 || hostFrameCount % 60 === 0) {
+        const flushGap = lastFlushTime > 0 ? (sendStart - lastFlushTime).toFixed(1) : '-';
+        const sendMs = (sendEnd - sendStart).toFixed(1);
+        const fragCount = Math.ceil(frameData.length / MAX_PAYLOAD);
+        onLog(`[latency] host frame#${hostFrameCount}: size=${frameData.length} frags=${fragCount} flushGap=${flushGap}ms send=${sendMs}ms`);
+      }
+      lastFlushTime = sendEnd;
+    } else {
+      sendFrame(frameData, clientIp, videoPort);
     }
-    lastFlushTime = sendEnd;
   });
 
   ffmpeg.stdout.on('data', (chunk) => {
-    const now = performance.now();
-    if (hostFrameCount <= 10 || hostFrameCount % 60 === 0) {
-      const chunkGap = lastChunkTime > 0 ? (now - lastChunkTime).toFixed(1) : '-';
-      if (hostFrameCount <= 10) {
-        onLog(`[latency] ffmpeg chunk: ${chunk.length} bytes, gap=${chunkGap}ms`);
+    if (DEBUG_MODE) {
+      const now = performance.now();
+      if (hostFrameCount <= 10 || hostFrameCount % 60 === 0) {
+        const chunkGap = lastChunkTime > 0 ? (now - lastChunkTime).toFixed(1) : '-';
+        if (hostFrameCount <= 10) {
+          onLog(`[latency] ffmpeg chunk: ${chunk.length} bytes, gap=${chunkGap}ms`);
+        }
       }
+      lastChunkTime = now;
     }
-    lastChunkTime = now;
     parser.push(chunk);
   });
 

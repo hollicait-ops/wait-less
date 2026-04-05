@@ -2,7 +2,7 @@
 
 ## Goal
 
-Stream the Windows laptop display and audio to an Amazon Fire Stick over local WiFi with glass-to-glass latency under 60ms. No cloud services, no relay servers, no new hardware purchases.
+Stream the Windows desktop display and audio to an Amazon Fire Stick over local WiFi. Measured glass-to-glass latency is ~120-150ms. No cloud services, no relay servers, no new hardware purchases.
 
 ---
 
@@ -10,7 +10,7 @@ Stream the Windows laptop display and audio to an Amazon Fire Stick over local W
 
 ```
 ┌─────────────────────────────────────────────┐     WiFi (5GHz LAN)    ┌──────────────────────────────┐
-│              LAPTOP (Windows)               │                         │       FIRE STICK             │
+│              HOST PC (Windows)               │                         │       FIRE STICK             │
 │                                             │                         │                              │
 │  ┌──────────────┐    ┌────────────────────┐ │   H.264 UDP (port 9000)│  ┌────────────────────────┐  │
 │  │ Electron     │    │ FFmpeg             │ │ ─────────────────────► │  │ Android App            │  │
@@ -76,10 +76,11 @@ Spawns FFmpeg as a child process using `gdigrab` (Windows GDI screen capture). F
 3. Sends fragments to the client's video port (default 9000)
 4. Listens on the input port (default 9001) for JSON input event datagrams
 
-FFmpeg flags used:
-- `-preset ultrafast -tune zerolatency` — minimises encode latency
+The encoder is auto-detected at startup: `h264_nvenc` (NVIDIA GPU) if available, otherwise `libx264`. Both produce identical Annex B output. Key flags:
 - `-profile:v baseline` — Fire Stick hardware decoder guaranteed path
-- `keyint=60:scenecut=0` — 1s IDR interval, no adaptive keyframes
+- `-fflags nobuffer -flush_packets 1` — minimize pipeline buffering
+- AUD NALs enabled for immediate frame boundary detection
+- IDR every 30 frames (0.5s) for fast recovery from packet loss
 
 ### Host: Input Relay (`robotjs`)
 
@@ -95,7 +96,7 @@ FFmpeg flags used:
 
 ### Client: Android App (Kotlin)
 
-**MainActivity** — IP entry screen. User types the laptop's local IP (e.g. `192.168.1.42`). Launches StreamActivity on confirm.
+**MainActivity** — IP entry screen. User types the host's local IP (e.g. `192.168.1.42`). Launches StreamActivity on confirm.
 
 **SignalingClient** — OkHttp WebSocket client. Connects to `ws://[ip]:8080`. On connect, sends `client-ready`. Receives `stream-info` containing the UDP video and input ports.
 
@@ -117,31 +118,33 @@ Converts events to JSON and sends via `UdpVideoReceiver.sendInputEvent()`.
 
 ---
 
-## Latency Budget
+## Latency Budget (Measured)
 
-| Stage | Target | Notes |
+| Stage | Measured | Notes |
 |---|---|---|
-| Screen capture | ~4ms | FFmpeg gdigrab, one frame at 60fps = 16.7ms max |
-| H.264 encoding | ~8ms | Software libx264 ultrafast+zerolatency; hardware (NVENC) would be ~2ms |
-| UDP packetise + send | ~1ms | No SRTP overhead, no jitter buffer |
-| WiFi transmission | ~5ms | 5GHz 802.11ac on same AP |
-| UDP receive + reassemble | ~1ms | In-process, no JVM GC pressure on fast path |
-| H.264 decode | ~8ms | Fire Stick MediaCodec hardware decoder |
-| Render | ~4ms | SurfaceTexture → OES shader → eglSwapBuffers |
-| **Total (target)** | **~31ms** | Well under 60ms threshold |
+| Screen capture (gdigrab) | **~130ms** | GDI→DWM compositor round-trip; dominant bottleneck |
+| H.264 encoding (NVENC) | ~2ms | Auto-detected; libx264 fallback ~5-10ms |
+| NAL parse + UDP send | ~0.1ms | Negligible |
+| WiFi transmission | ~2-5ms | 5GHz 802.11ac on same AP |
+| UDP receive + reassemble | ~0.2ms | Queue wait (steady state) |
+| H.264 decode | ~7ms | Fire Stick MediaCodec hardware decoder |
+| **Total (measured)** | **~120-150ms** | |
 
-Primary improvement over WebRTC: elimination of the jitter buffer (~10–50ms on LAN).
+The gdigrab capture is the dominant bottleneck. DXGI Desktop Duplication (ddagrab) would reduce capture to ~1-2ms but requires D3D11-to-CUDA interop not currently supported by the NVENC FFmpeg pipeline. See BUG-37 for details.
 
 ---
 
 ## Codec Configuration
 
-**Video:** H.264 Baseline Profile, Level 4.1
-- Resolution: 1920×1080 (fixed)
+**Video:** H.264 Baseline Profile
+- Resolution: 1920x1080 (scaled from desktop, aspect-ratio preserved with padding)
 - Framerate: 60fps
-- Preset: `ultrafast`, tune: `zerolatency`
-- Keyframe interval: 60 frames (1 second)
+- Encoder: h264_nvenc (auto-detected) or libx264 fallback
+- NVENC: `-preset p1 -tune ull -delay 0 -zerolatency 1 -rc cbr -b:v 15M`
+- libx264: `-preset ultrafast -tune zerolatency -x264-params slices=4:chroma-qp-offset=-4:aud=1`
+- Keyframe interval: 30 frames (0.5 seconds) for fast recovery from packet loss
 - No B-frames (baseline profile enforces this)
+- AUD NALs enabled for immediate frame flush in the NAL parser
 
 **Audio:** Not yet implemented (video-only in SB-21).
 
@@ -169,7 +172,7 @@ Client reassembles fragments by `frame_id`. Incomplete frames (due to packet los
 ## Network Requirements
 
 - Same local WiFi network (no internet required)
-- Both devices on 5GHz band (2.4GHz will likely exceed 60ms target)
+- Both devices on 5GHz band (2.4GHz will add significant latency)
 - Ports used: 8080 (TCP WebSocket signaling), 9000 (UDP video), 9001 (UDP input)
 - No port forwarding needed — all communication is LAN-only
 
@@ -177,11 +180,11 @@ Client reassembles fragments by `frame_id`. Incomplete frames (due to packet los
 
 ## Security Considerations
 
-This is a LAN-only tool. There is no authentication beyond knowing the laptop's IP address. Mitigations:
+This is a LAN-only tool. There is no authentication beyond knowing the host's IP address. Mitigations:
 
 - Signaling server only listens on the local network interface, not exposed to internet
 - UDP sockets are LAN-only by design
-- Optionally implement a one-time PIN displayed on the laptop that the Fire Stick must enter before stream-info is sent
+- Optionally implement a one-time PIN displayed on the host that the Fire Stick must enter before stream-info is sent
 
 ---
 
@@ -198,9 +201,9 @@ This is a LAN-only tool. There is no authentication beyond knowing the laptop's 
 ## Future Improvements
 
 - **Audio streaming:** Capture system audio via FFmpeg and multiplex over UDP alongside video
-- **Hardware encoding:** Auto-detect NVENC/QuickSync on the host; fall back to libx264
+- **DXGI capture (ddagrab):** Would reduce capture latency from ~130ms to ~1-2ms, but requires D3D11-to-CUDA interop not currently supported (BUG-37)
 - **Adaptive bitrate:** Reduce bitrate on packet loss detection; expose bitrate in HUD
 - **Multi-monitor support:** Let user pick which display to stream from the host UI
-- **mDNS discovery:** Eliminate IP entry — laptop advertises `_streambridge._tcp.local`, Fire Stick discovers it automatically
-- **PIN authentication:** 4-digit PIN shown on laptop, entered on Fire Stick to authorize connection
-- **Wake-on-LAN:** Fire Stick app sends WOL packet to wake the laptop before connecting
+- **mDNS discovery:** Eliminate IP entry -- host advertises `_streambridge._tcp.local`, Fire Stick discovers it automatically
+- **PIN authentication:** 4-digit PIN shown on host, entered on Fire Stick to authorize connection
+- **Wake-on-LAN:** Fire Stick app sends WOL packet to wake the host before connecting

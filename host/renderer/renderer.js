@@ -108,54 +108,60 @@ startBtn.addEventListener('click', async () => {
 
 restartBtn.addEventListener('click', () => streambridge.restart());
 
-// --- Latency clock ---
-// Shows a running seconds.milliseconds counter captured by gdigrab.
-// Compare the value on the Fire Stick screen vs the laptop screen to
-// read glass-to-glass latency directly (difference in ms).
-const latencyClock = document.getElementById('latency-clock');
-const latencyToggle = document.getElementById('latency-toggle');
-let clockRunning = false;
-let clockRaf = null;
+// --- Debug tools (hidden unless STREAMBRIDGE_DEBUG=1) ---
+async function initDebugTools() {
+  const debug = await streambridge.isDebug();
+  if (!debug) return;
 
-function tickClock() {
-  const t = performance.now();
-  const secs = Math.floor(t / 1000) % 10000;
-  const ms = Math.floor(t % 1000);
-  latencyClock.textContent = `${String(secs).padStart(4, '0')}.${String(ms).padStart(3, '0')}`;
-  clockRaf = requestAnimationFrame(tickClock);
+  const latencyClock = document.getElementById('latency-clock');
+  const latencyToggle = document.getElementById('latency-toggle');
+  const captureLatencyBtn = document.getElementById('capture-latency-btn');
+
+  latencyToggle.style.display = '';
+  captureLatencyBtn.style.display = '';
+
+  let clockRunning = false;
+  let clockRaf = null;
+
+  function tickClock() {
+    const t = performance.now();
+    const secs = Math.floor(t / 1000) % 10000;
+    const ms = Math.floor(t % 1000);
+    latencyClock.textContent = `${String(secs).padStart(4, '0')}.${String(ms).padStart(3, '0')}`;
+    clockRaf = requestAnimationFrame(tickClock);
+  }
+
+  latencyToggle.addEventListener('click', () => {
+    clockRunning = !clockRunning;
+    if (clockRunning) {
+      latencyClock.style.display = 'block';
+      latencyToggle.textContent = 'Hide clock';
+      tickClock();
+    } else {
+      latencyClock.style.display = 'none';
+      latencyToggle.textContent = 'Latency clock';
+      cancelAnimationFrame(clockRaf);
+      clockRaf = null;
+    }
+  });
+
+  captureLatencyBtn.addEventListener('click', async () => {
+    captureLatencyBtn.disabled = true;
+    captureLatencyBtn.textContent = 'Capturing...';
+    try {
+      const result = await streambridge.captureLatency();
+      if (result.error) {
+        logStatus(`Latency capture failed: ${result.error}`);
+      } else {
+        logStatus(`Latency screenshots saved -- host: ${result.host}, firestick: ${result.firestick}`);
+      }
+    } catch (err) {
+      logStatus(`Latency capture error: ${err.message}`);
+    }
+    captureLatencyBtn.disabled = false;
+    captureLatencyBtn.textContent = 'Capture latency';
+  });
 }
 
-latencyToggle.addEventListener('click', () => {
-  clockRunning = !clockRunning;
-  if (clockRunning) {
-    latencyClock.style.display = 'block';
-    latencyToggle.textContent = 'Hide clock';
-    tickClock();
-  } else {
-    latencyClock.style.display = 'none';
-    latencyToggle.textContent = 'Latency clock';
-    cancelAnimationFrame(clockRaf);
-    clockRaf = null;
-  }
-});
-
-// --- Latency capture ---
-const captureLatencyBtn = document.getElementById('capture-latency-btn');
-captureLatencyBtn.addEventListener('click', async () => {
-  captureLatencyBtn.disabled = true;
-  captureLatencyBtn.textContent = 'Capturing...';
-  try {
-    const result = await streambridge.captureLatency();
-    if (result.error) {
-      logStatus(`Latency capture failed: ${result.error}`);
-    } else {
-      logStatus(`Latency screenshots saved — laptop: ${result.laptop}, firestick: ${result.firestick}`);
-    }
-  } catch (err) {
-    logStatus(`Latency capture error: ${err.message}`);
-  }
-  captureLatencyBtn.disabled = false;
-  captureLatencyBtn.textContent = 'Capture latency';
-});
-
 init();
+initDebugTools();

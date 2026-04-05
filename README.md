@@ -1,6 +1,6 @@
 # StreamBridge
 
-Stream your Windows desktop to an Amazon Fire Stick over local WiFi. No cloud services, no relay servers, no new hardware. Target latency is under 60ms glass-to-glass.
+Stream your Windows desktop to an Amazon Fire Stick over local WiFi. No cloud services, no relay servers, no new hardware. Measured latency is ~120-150ms glass-to-glass.
 
 Architecturally similar to Steam Link: an Electron host captures the display and streams it via FFmpeg + raw UDP, a native Android app on the Fire Stick decodes and renders it, and the Fire Stick D-pad acts as a mouse/keyboard.
 
@@ -39,7 +39,7 @@ Architecturally similar to Steam Link: an Electron host captures the display and
 
 ### Network
 
-- Both devices on the **same 5GHz WiFi network** — 2.4GHz will likely exceed the 60ms latency target
+- Both devices on the **same 5GHz WiFi network** — 2.4GHz will likely add significant latency
 - No port forwarding or internet access required
 
 ---
@@ -67,7 +67,7 @@ The app window displays the host's local IP address and a **Start Streaming** bu
 **Initial Fire OS setup** (skip if already done):
 
 4. Follow the on-screen prompts to select your language and sign in to your Amazon account.
-5. When prompted for WiFi, connect to the **same 5GHz network** your Windows PC is on. Using 2.4GHz will likely exceed the 60ms latency target.
+5. When prompted for WiFi, connect to the **same 5GHz network** your Windows PC is on. Using 2.4GHz will likely add significant latency.
 
 **Enable developer options:**
 
@@ -163,7 +163,7 @@ cd client
 
 ### Measuring latency
 
-Display a running stopwatch on the host PC, film both the host screen and the Fire Stick simultaneously with a phone camera, then count the frame offset. Each frame at 60fps is ~16.7ms.
+Set `STREAMBRIDGE_DEBUG=1` before launching the host to enable the built-in latency clock and capture tools. The clock displays milliseconds on screen (visible in the stream); compare host vs Fire Stick values. Alternatively, film both screens with a phone camera and count the frame offset (~16.7ms per frame at 60fps).
 
 ---
 
