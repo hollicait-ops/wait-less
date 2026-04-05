@@ -1,11 +1,11 @@
-const { app, BrowserWindow, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, desktopCapturer, ipcMain, screen } = require('electron');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const { createSignalingServer } = require('./src/signaling');
 const { replayInputEvent } = require('./src/input');
-const { startStreamer, stopStreamer, VIDEO_PORT, INPUT_PORT } = require('./src/streamer');
+const { startStreamer, stopStreamer, warmupEncoder, VIDEO_PORT, INPUT_PORT } = require('./src/streamer');
 
 const SIGNALING_PORT = 8080;
 
@@ -116,14 +116,15 @@ function takeFireStickScreenshot(delayMs = 3000) {
 
 // Capture both screens simultaneously for latency measurement.
 // Kicks off local desktopCapturer + adb screencap in parallel,
-// saving timestamped PNGs to C:\temp\ for side-by-side comparison.
+// saving timestamped PNGs to the system temp dir for side-by-side comparison.
 ipcMain.handle('capture-latency', async () => {
+  const tmpDir = app.getPath('temp');
   const timestamp = Date.now();
-  const localDest = `C:\\temp\\latency_laptop_${timestamp}.png`;
-  const remoteDest = `C:\\temp\\latency_firestick_${timestamp}.png`;
+  const localDest = path.join(tmpDir, `latency_laptop_${timestamp}.png`);
+  const remoteDest = path.join(tmpDir, `latency_firestick_${timestamp}.png`);
 
   // Start both captures concurrently
-  const localPromise = require('electron').desktopCapturer.getSources({
+  const localPromise = desktopCapturer.getSources({
     types: ['screen'],
     thumbnailSize: { width: 1920, height: 1200 },
   }).then((sources) => {
@@ -132,6 +133,8 @@ ipcMain.handle('capture-latency', async () => {
       fs.writeFileSync(localDest, src.thumbnail.toPNG());
       console.log('[latency] laptop screenshot saved:', localDest);
     }
+  }).catch((err) => {
+    console.warn('[latency] laptop capture failed:', err.message);
   });
 
   const adbPromise = new Promise((resolve) => {
@@ -171,6 +174,7 @@ ipcMain.handle('restart', () => { app.relaunch(); app.exit(0); });
 
 app.whenReady().then(() => {
   loadRobotjs();
+  warmupEncoder().then((enc) => console.log('[main] encoder detected:', enc));
   startSignalingServer();
   createWindow();
 });
