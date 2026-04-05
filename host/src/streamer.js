@@ -1,7 +1,8 @@
 // streamer.js — FFmpeg screen capture + H.264 UDP sender + input receiver
 //
-// FFmpeg captures the desktop via gdigrab, encodes to H.264 Annex B, and
-// the output is fragmented into UDP packets sent to the client.
+// FFmpeg captures the desktop (ddagrab DXGI on NVIDIA, gdigrab GDI fallback),
+// encodes to H.264 Annex B, and the output is fragmented into UDP packets
+// sent to the client.
 //
 // UDP framing (8-byte header per packet):
 //   [0..3]  frame_id   uint32 BE — monotonic frame counter
@@ -48,6 +49,34 @@ function detectEncoder() {
 }
 
 /**
+ * Build capture (input) args based on encoder.
+ * NVENC: ddagrab (DXGI Desktop Duplication) — captures as D3D11 textures on GPU,
+ *   ~1-2ms capture latency, proper cursor compositing during fast movement.
+ * libx264: gdigrab — captures via GDI API to system memory, ~16ms latency.
+ */
+function buildCaptureArgs(encoder) {
+  if (encoder === 'h264_nvenc') {
+    // ddagrab is a lavfi source filter that captures via DXGI Desktop Duplication.
+    // Output is D3D11 hardware frames — stays on GPU through to NVENC.
+    return [
+      '-f', 'lavfi',
+      '-i', 'ddagrab=framerate=60',
+    ];
+  }
+
+  // gdigrab: GDI-based capture to system memory for CPU encoders.
+  // -fflags nobuffer: skip input buffering on the demuxer side.
+  // -thread_queue_size 2: cap gdigrab capture queue to 2 frames.
+  return [
+    '-fflags', 'nobuffer',
+    '-thread_queue_size', '2',
+    '-f', 'gdigrab',
+    '-framerate', '60',
+    '-i', 'desktop',
+  ];
+}
+
+/**
  * Build encoder-specific FFmpeg args.
  * Both paths produce H.264 Annex B with BT.709 color metadata and AUD NALs.
  */
@@ -64,6 +93,10 @@ function buildEncoderArgs(encoder) {
 
   if (encoder === 'h264_nvenc') {
     // NVENC hardware encoder — ~2ms encode latency, no frame pipeline.
+    // ddagrab outputs D3D11 hardware frames (BGRA); hwdownload brings them to
+    // CPU for the scale+pad filter, then NVENC auto-uploads back to GPU.
+    // The capture latency win from ddagrab (~1ms vs gdigrab's ~16ms) is worth
+    // the CPU roundtrip for scaling.
     // -preset p1: fastest NVENC preset.
     // -tune ull: ultra-low-latency mode — disables B-frames, lookahead, etc.
     // -delay 0: zero output delay — NVENC defaults to INT_MAX which buffers
@@ -73,11 +106,11 @@ function buildEncoderArgs(encoder) {
     // -aud 1: emit Access Unit Delimiter NALs for immediate parser flush.
     // -forced-idr 1 + -g 30: IDR every 30 frames for loss recovery.
     return [
+      '-vf', 'hwdownload,format=bgra,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,format=yuv420p',
       '-c:v', 'h264_nvenc',
       '-preset', 'p1',
       '-tune', 'ull',
       '-profile:v', 'baseline',
-      '-pix_fmt', 'yuv420p',
       ...colorArgs,
       '-rc', 'cbr',
       '-b:v', '15M',
@@ -103,6 +136,7 @@ function buildEncoderArgs(encoder) {
   // slices=4: 4-way intra-frame parallelism; more slices = more parallelism but
   //   more boundary artifacts; 4 is a good balance.
   return [
+    '-vf', 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2',
     '-c:v', 'libx264',
     '-preset', 'ultrafast',
     '-tune', 'zerolatency',
@@ -149,21 +183,14 @@ function startStreamer({ clientIp, videoPort = VIDEO_PORT, inputPort = INPUT_POR
   });
   inputSocket.bind(inputPort, () => onLog(`[udp-input] listening on port ${inputPort}`));
 
-  // FFmpeg command: gdigrab → H.264 baseline → Annex B on stdout
   // Encoder selection: h264_nvenc (NVIDIA GPU) if available, else libx264.
   // Both produce identical Annex B H.264 output — the client is codec-agnostic.
-  // -fflags nobuffer: skip input buffering on the demuxer side.
   // -flush_packets 1: flush each muxer packet to stdout immediately.
   const encoder = detectEncoder();
   onLog(`[streamer] using encoder: ${encoder}`);
 
   const ffmpegArgs = [
-    '-fflags', 'nobuffer',
-    '-thread_queue_size', '2',
-    '-f', 'gdigrab',
-    '-framerate', '60',
-    '-i', 'desktop',
-    '-vf', 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2',
+    ...buildCaptureArgs(encoder),
     ...buildEncoderArgs(encoder),
     '-flush_packets', '1',
     '-f', 'h264',
