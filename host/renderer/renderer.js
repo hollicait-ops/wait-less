@@ -135,6 +135,7 @@ latencyToggle.addEventListener('click', () => {
     latencyClock.style.display = 'none';
     latencyToggle.textContent = 'Latency clock';
     cancelAnimationFrame(clockRaf);
+    clockRaf = null;
   }
 });
 

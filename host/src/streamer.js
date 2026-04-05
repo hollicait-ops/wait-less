@@ -79,6 +79,9 @@ function startStreamer({ clientIp, videoPort = VIDEO_PORT, inputPort = INPUT_POR
     '-profile:v', 'baseline',
     '-level', '4.1',
     '-pix_fmt', 'yuv420p',
+    // Explicit BT.709 metadata so the decoder uses the correct color matrix.
+    // Without these, decoders may guess the wrong primaries and apply the wrong
+    // YUV-to-RGB conversion, causing a chroma shift especially in dark areas.
     '-colorspace', 'bt709',
     '-color_primaries', 'bt709',
     '-color_trc', 'bt709',
@@ -91,6 +94,10 @@ function startStreamer({ clientIp, videoPort = VIDEO_PORT, inputPort = INPUT_POR
     // aud=1: emit an Access Unit Delimiter NAL (type 9) before each frame so the
     // NAL parser can flush immediately on the AUD rather than waiting for the next
     // frame's first slice to arrive and be parsed (~one encode cycle earlier).
+    // keyint=30: IDR every 30 frames (0.5s at 60fps) for fast recovery from loss.
+    // slices=4: 4-way intra-frame parallelism (used by -tune zerolatency's
+    //   sliced-threads mode). More slices = more parallelism but more boundary
+    //   artifacts; 4 is a good balance.
     '-x264-params', 'keyint=30:min-keyint=30:scenecut=0:bframes=0:slices=4:chroma-qp-offset=-4:aud=1',
     '-flush_packets', '1',
     '-f', 'h264',
@@ -142,9 +149,6 @@ function stopStreamer() {
 // NAL parser — buffers Annex B chunks, emits one complete frame at a time
 // ---------------------------------------------------------------------------
 
-// H.264 NAL unit types
-const NAL_IDR_SLICE = 5;
-const NAL_NON_IDR_SLICE = 1;
 const NAL_AUD = 9; // Access Unit Delimiter
 
 function createNalParser(onFrame) {
